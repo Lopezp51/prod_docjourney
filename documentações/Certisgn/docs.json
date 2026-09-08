@@ -1,0 +1,1745 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "version": "2.0",
+    "title": "API Certisign V2",
+    "description": "A Web API do Portal de Assinaturas tem o objetivo de prover uma interface REST para todas as funcionalidades do portal.",
+    "contact": {
+      "name": "Certisign",
+      "url": "http://www.certisign.com.br"
+    }
+  },
+  "host": "api-sbx.portaldeassinaturas.com.br",
+  "basePath": "/api/v2",
+  "security": [
+    {
+      "token": []
+    },
+    {
+      "code": []
+    }
+  ],
+  "securityDefinitions": {
+    "token": {
+      "type": "apiKey",
+      "in": "header",
+      "name": "token"
+    },
+    "code": {
+      "type": "apiKey",
+      "in": "header",
+      "name": "code"
+    }
+  },
+  "schemes": [
+    "https"
+  ],
+  "consumes": [
+    "application/json",
+    "application/xml"
+  ],
+  "produces": [
+    "application/json",
+    "application/xml"
+  ],
+  "paths": {
+    "/document/upload": {
+      "post": {
+        "description": "Save to temporary directory the file with bytes sent in request.",
+        "operationId": "uploadDocument",
+        "parameters": [
+          {
+            "name": "document",
+            "in": "body",
+            "description": "Document data to be uploaded.",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/DocumentUpload"
+            }
+          }
+        ],
+        "security": [
+          {
+            "token": []
+          },
+          {
+            "code": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/DocumentUploadResponse"
+            }
+          }
+        },
+        "tags": [
+          "document"
+        ]
+      }
+    },
+    "/document/create": {
+      "post": {
+        "description": "Submits a document whose upload was conducted previously. It's possible submit a document to Digital, Electronic or Server signature, using the respective attributes signers, electronicSigners or serverSigners.",
+        "operationId": "createDocument",
+        "parameters": [
+          {
+            "name": "document",
+            "in": "body",
+            "description": "Document data to be uploaded.",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/DocumentCreate"
+            }
+          }
+        ],
+        "security": [
+          {
+            "token": []
+          },
+          {
+            "code": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/DocumentCreateResponse"
+            }
+          }
+        },
+        "tags": [
+          "document"
+        ]
+      }
+    },
+    "/document/listByStatus": {
+      "get": {
+        "description": "Lists the documents of a dossier by the document status in the selected account.",
+        "operationId": "listDocumentsByStatus",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Document status.",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "identifier",
+            "in": "query",
+            "description": "Document identifier.",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "dossierId",
+            "in": "query",
+            "description": "Dossier ID.",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "companyId",
+            "in": "query",
+            "description": "Company ID.",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Offset rows.",
+            "required": true,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "max",
+            "in": "query",
+            "description": "Max number of rows.",
+            "required": true,
+            "type": "integer",
+            "format": "int32"
+          }
+        ],
+        "security": [
+          {
+            "token": []
+          },
+          {
+            "code": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/DocumentListResponse"
+            }
+          }
+        },
+        "tags": [
+          "document"
+        ]
+      }
+    },
+    "/document/package": {
+      "get": {
+        "description": "Retrieves a ZIP file containing: 1. If the file is PDF: the original document, the document with the manifesto of the collected signatures and the PKCS7 file. 2. Otherwise: the original document , a PDF document with the manifesto of the collected signatures and the PKCS7 file.",
+        "operationId": "getDocumentPackage",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "query",
+            "description": "Document key.",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "includeOriginal",
+            "in": "query",
+            "description": "Indicates whether the original document should be included if the filetype is PDF.",
+            "required": true,
+            "type": "boolean"
+          }
+        ],
+        "security": [
+          {
+            "token": []
+          },
+          {
+            "code": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/DocumentPackageResponse"
+            }
+          }
+        },
+        "tags": [
+          "document"
+        ]
+      }
+    },
+    "/document/delete": {
+      "delete": {
+        "description": "Deletes a document.",
+        "operationId": "deleteDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "description": "Id of the document to be removed.",
+            "required": true,
+            "type": "integer",
+            "format": "int32"
+          }
+        ],
+        "security": [
+          {
+            "token": []
+          },
+          {
+            "code": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "document"
+        ]
+      }
+    },
+    "/document/versionAdd": {
+      "post": {
+        "description": "Adds a new version to the document.",
+        "operationId": "postDocumentVersion",
+        "parameters": [
+          {
+            "name": "documentVersion",
+            "in": "body",
+            "description": "Document version to be added.",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/DocumentVersionAdd"
+            }
+          }
+        ],
+        "security": [
+          {
+            "token": []
+          },
+          {
+            "code": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "document"
+        ]
+      }
+    },
+    "/document/createBatch": {
+      "post": {
+        "description": "Submits a batch of documents.",
+        "operationId": "createDocumentBatch",
+        "parameters": [
+          {
+            "name": "documents",
+            "in": "body",
+            "description": "Document batch to be created.",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/DocumentCreateBatch"
+            }
+          }
+        ],
+        "security": [
+          {
+            "token": []
+          },
+          {
+            "code": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "document"
+        ]
+      }
+    },
+    "/document/reject": {
+      "post": {
+        "description": "Rejects a document.",
+        "operationId": "postDocumentReject",
+        "parameters": [
+          {
+            "name": "documentReject",
+            "in": "body",
+            "description": "Document rejection.",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/DocumentReject"
+            }
+          }
+        ],
+        "security": [
+          {
+            "token": []
+          },
+          {
+            "code": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "document"
+        ]
+      }
+    },
+    "/document/flowActions": {
+      "get": {
+        "description": "Retrieves stages of a document actions flow separating at each stage, whose actions are being awaited.",
+        "operationId": "listDocumentsFlowActions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "description": "Document ID.",
+            "required": true,
+            "type": "integer",
+            "format": "int32"
+          }
+        ],
+        "security": [
+          {
+            "token": []
+          },
+          {
+            "code": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/DocumentFlowActionsResponse"
+            }
+          }
+        },
+        "tags": [
+          "document"
+        ]
+      }
+    },
+    "/document/signatureNotNecessary": {
+      "post": {
+        "tags": [
+          "document"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/document/details": {
+      "get": {
+        "tags": [
+          "document"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/dossier/create": {
+      "post": {
+        "description": "Submits a dossier to be created.",
+        "operationId": "createDossier",
+        "parameters": [
+          {
+            "name": "dossier",
+            "in": "body",
+            "description": "Dossier to be created.",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/DossierCreate"
+            }
+          }
+        ],
+        "security": [
+          {
+            "token": []
+          },
+          {
+            "code": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/DossierCreateResponse"
+            }
+          }
+        },
+        "tags": [
+          "dossier"
+        ]
+      }
+    },
+    "/signatureVerifier/fileEvaluation": {
+      "post": {
+        "description": "Checks that the uploaded file is valid to be verified.",
+        "operationId": "fileEvaluation",
+        "parameters": [
+          {
+            "name": "request",
+            "in": "body",
+            "description": "",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/SignatureVerifierEvaluation"
+            }
+          }
+        ],
+        "security": [
+          {
+            "token": []
+          },
+          {
+            "code": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/SignatureVerifierEvaluationResponse"
+            }
+          }
+        },
+        "tags": [
+          "signatureVerifier"
+        ]
+      }
+    },
+    "/signatureVerifier/verifySignature": {
+      "post": {
+        "description": "Verifies signatures in uploaded file.",
+        "operationId": "verifySignature",
+        "parameters": [
+          {
+            "name": "request",
+            "in": "body",
+            "description": "",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/SignatureVerifierValidate"
+            }
+          }
+        ],
+        "security": [
+          {
+            "token": []
+          },
+          {
+            "code": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/SignatureVerifierValidateResponse"
+            }
+          }
+        },
+        "tags": [
+          "signatureVerifier"
+        ]
+      }
+    },
+    "/personalDocument/identification": {
+      "post": {
+        "description": "\u003Cb\u003ETo use this API, will be must use the Upload API to up two images (front and back document image), the Ids generated for the two images must be used in this API.\u003C/b\u003E \u003Cbr /\u003E\u003Cbr /\u003ESubmits a type of document and images (front and back) whose upload was conducted previously to receive the data of image.\u003Cb\u003E\u003Cbr /\u003E\u003Cbr /\u003EAll response properties are optionals. And some response properties can be not returneds by the type of document.\u003C/b\u003E",
+        "tags": [
+          "personalDocument"
+        ],
+        "parameters": [
+          {
+            "name": "PersonalDocumentIdentificationRequest",
+            "in": "body",
+            "description": "Data that contains properties of images and type of document.",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/DocumentIdentificationRequest"
+            }
+          }
+        ],
+        "security": [
+          {
+            "token": []
+          },
+          {
+            "code": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/PersonalDocumentIdentificationResponse"
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "DocumentUpload": {
+      "required": [
+        "bytes",
+        "fileName"
+      ],
+      "properties": {
+        "fileName": {
+          "type": "string",
+          "description": "Document name to be uploaded."
+        },
+        "bytes": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "description": "Document bytes."
+        }
+      },
+      "example": {
+        "fileName": "PDF-Teste.pdf",
+        "bytes": [37, 80, 68, 70, 45, 49, 46, 52, 10, 37, 226, 227, 207, 211, 10, 50, 32, 48, 32, 111, 98, 106, 10, 60, 60, 47, 76, 101, 110, 103, 116, 104, 32, 55, 49, 47, 70, 105, 108, 116, 101, 114, 47, 70, 108, 97, 116, 101, 68, 101, 99, 111, 100, 101, 62, 62, 115, 116, 114, 101, 97, 109, 10, 120, 156, 43, 228, 114, 10, 225, 50, 54, 83, 176, 48, 48, 83, 8, 73, 225, 50, 80, 208, 53, 180, 0, 49, 244, 221, 12, 21, 12, 141, 20, 66, 210, 184, 52, 156, 83, 243, 30, 22, 101, 230, 43, 24, 42, 232, 42, 184, 36, 166, 228, 23, 107, 134, 100, 1, 21, 26, 128, 148, 185, 134, 112, 5, 114, 1, 0, 34, 4, 16, 93, 10, 101, 110, 100, 115, 116, 114, 101, 97, 109, 10, 101, 110, 100, 111, 98, 106, 10, 52, 32, 48, 32, 111, 98, 106, 10, 60, 60, 47, 80, 97, 114, 101, 110, 116, 32, 51, 32, 48, 32, 82, 47, 67, 111, 110, 116, 101, 110, 116, 115, 32, 50, 32, 48, 32, 82, 47, 84, 121, 112, 101, 47, 80, 97, 103, 101, 47, 82, 101, 115, 111, 117, 114, 99, 101, 115, 60, 60, 47, 70, 111, 110, 116, 60, 60, 47, 70, 49, 32, 49, 32, 48, 32, 82, 62, 62, 62, 62, 47, 77, 101, 100, 105, 97, 66, 111, 120, 91, 48, 32, 48, 32, 53, 57, 53, 32, 56, 52, 50, 93, 62, 62, 10, 101, 110, 100, 111, 98, 106, 10, 49, 32, 48, 32, 111, 98, 106, 10, 60, 60, 47, 66, 97, 115, 101, 70, 111, 110, 116, 47, 72, 101, 108, 118, 101, 116, 105, 99, 97, 47, 84, 121, 112, 101, 47, 70, 111, 110, 116, 47, 69, 110, 99, 111, 100, 105, 110, 103, 47, 87, 105, 110, 65, 110, 115, 105, 69, 110, 99, 111, 100, 105, 110, 103, 47, 83, 117, 98, 116, 121, 112, 101, 47, 84, 121, 112, 101, 49, 62, 62, 10, 101, 110, 100, 111, 98, 106, 10, 51, 32, 48, 32, 111, 98, 106, 10, 60, 60, 47, 84, 121, 112, 101, 47, 80, 97, 103, 101, 115, 47, 67, 111, 117, 110, 116, 32, 49, 47, 75, 105, 100, 115, 91, 52, 32, 48, 32, 82, 93, 62, 62, 10, 101, 110, 100, 111, 98, 106, 10, 53, 32, 48, 32, 111, 98, 106, 10, 60, 60, 47, 84, 121, 112, 101, 47, 67, 97, 116, 97, 108, 111, 103, 47, 80, 97, 103, 101, 115, 32, 51, 32, 48, 32, 82, 62, 62, 10, 101, 110, 100, 111, 98, 106, 10, 54, 32, 48, 32, 111, 98, 106, 10, 60, 60, 47, 80, 114, 111, 100, 117, 99, 101, 114, 40, 105, 84, 101, 120, 116, 174, 32, 53, 46, 53, 46, 50, 32, 169, 50, 48, 48, 48, 45, 50, 48, 49, 52, 32, 105, 84, 101, 120, 116, 32, 71, 114, 111, 117, 112, 32, 78, 86, 32, 92, 40, 65, 71, 80, 76, 45, 118, 101, 114, 115, 105, 111, 110, 92, 41, 41, 47, 77, 111, 100, 68, 97, 116, 101, 40, 68, 58, 50, 48, 49, 52, 49, 49, 49, 55, 49, 53, 51, 48, 49, 55, 45, 48, 50, 39, 48, 48, 39, 41, 47, 67, 114, 101, 97, 116, 105, 111, 110, 68, 97, 116, 101, 40, 68, 58, 50, 48, 49, 52, 49, 49, 49, 55, 49, 53, 51, 48, 49, 55, 45, 48, 50, 39, 48, 48, 39, 41, 62, 62, 10, 101, 110, 100, 111, 98, 106, 10, 120, 114, 101, 102, 10, 48, 32, 55, 10, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 32, 54, 53, 53, 51, 53, 32, 102, 32, 10, 48, 48, 48, 48, 48, 48, 48, 50, 54, 52, 32, 48, 48, 48, 48, 48, 32, 110, 32, 10, 48, 48, 48, 48, 48, 48, 48, 48, 49, 53, 32, 48, 48, 48, 48, 48, 32, 110, 32, 10, 48, 48, 48, 48, 48, 48, 48, 51, 53, 50, 32, 48, 48, 48, 48, 48, 32, 110, 32, 10, 48, 48, 48, 48, 48, 48, 48, 49, 53, 50, 32, 48, 48, 48, 48, 48, 32, 110, 32, 10, 48, 48, 48, 48, 48, 48, 48, 52, 48, 51, 32, 48, 48, 48, 48, 48, 32, 110, 32, 10, 48, 48, 48, 48, 48, 48, 48, 52, 52, 56, 32, 48, 48, 48, 48, 48, 32, 110, 32, 10, 116, 114, 97, 105, 108, 101, 114, 10, 60, 60, 47, 82, 111, 111, 116, 32, 53, 32, 48, 32, 82, 47, 73, 68, 32, 91, 60, 52, 49, 55, 102, 50, 51, 51, 102, 102, 100, 51, 55, 54, 48, 48, 99, 54, 57, 51, 97, 48, 51, 51, 101, 49, 52, 50, 57, 51, 48, 100, 102, 62, 60, 52, 49, 55, 102, 50, 51, 51, 102, 102, 100, 51, 55, 54, 48, 48, 99, 54, 57, 51, 97, 48, 51, 51, 101, 49, 52, 50, 57, 51, 48, 100, 102, 62, 93, 47, 73, 110, 102, 111, 32, 54, 32, 48, 32, 82, 47, 83, 105, 122, 101, 32, 55, 62, 62, 10, 37, 105, 84, 101, 120, 116, 45, 53, 46, 53, 46, 50, 10, 115, 116, 97, 114, 116, 120, 114, 101, 102, 10, 54, 48, 53, 10, 37, 37, 69, 79, 70, 10]
+      }
+    },
+    "DocumentUploadResponse": {
+      "required": [
+        "uploadId"
+      ],
+      "properties": {
+        "uploadId": {
+          "type": "string",
+          "description": "Id for the uploaded Document."
+        }
+      }
+    },
+    "DocumentCreate": {
+      "required": [
+        "typeId"
+      ],
+      "properties": {
+        "typeId": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Document type. Use value 1."
+        },
+        "document": {
+          "$ref": "#/definitions/DocumentInfo"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DocumentField"
+          },
+          "description": "Document fields."
+        },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DocumentAttachment"
+          },
+          "description": "Document attachments."
+        },
+        "accountId": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Account ID."
+        },
+        "folderId": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Folder ID."
+        },
+        "signatureFormatId": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Signature format ID."
+        },
+        "callback": {
+          "type": "boolean",
+          "description": "If document has a callback."
+        },
+        "sender": {
+          "$ref": "#/definitions/SenderInfo"
+        },
+        "signers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SignerInfo"
+          },
+          "description": "Document signer list."
+        },
+        "electronicSigners": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ElectronicSignerInfo"
+          },
+          "description": "Document signer list."
+        },
+        "serverSigners": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ServerSignerInfo"
+          },
+          "description": "Document signer list."
+        },
+        "observers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SignerInfo"
+          },
+          "description": "Document observer list."
+        },
+        "finishers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SignerInfo"
+          },
+          "description": "Document finisher list."
+        },
+        "representatives": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RepresentativeInfo"
+          },
+          "description": "Document representative list."
+        },
+        "globalObservers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ObserverInfo"
+          }
+        },
+        "recipients": {
+          "$ref": "#/definitions/DocumentRecipients"
+        },
+        "notifiedList": {
+          "$ref": "#/definitions/DocumentNotifications"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Document name to be uploaded"
+        }
+      }
+    },
+    "DocumentInfo": {
+      "required": [
+        "name",
+        "upload"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Document name."
+        },
+        "upload": {
+          "$ref": "#/definitions/DocumentUploadInfo"
+        }
+      }
+    },
+    "DocumentUploadInfo": {
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Document upload ID."
+        },
+        "name": {
+          "type": "string",
+          "description": "Document name to be uploaded."
+        }
+      }
+    },
+    "DocumentField": {
+      "properties": {
+        "valueId": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Field value ID."
+        },
+        "value": {
+          "type": "string",
+          "description": "Field value."
+        },
+        "id": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Field ID."
+        },
+        "name": {
+          "type": "string",
+          "description": "Field name."
+        }
+      }
+    },
+    "DocumentAttachment": {
+      "properties": {
+        "associatedAttachmentId": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Document name."
+        },
+        "description": {
+          "type": "string",
+          "description": "Document name."
+        },
+        "upload": {
+          "$ref": "#/definitions/DocumentUploadInfo"
+        },
+        "bytes": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "description": "Atachment byte array."
+        }
+      }
+    },
+    "ElectronicIdentificationTypeInfo": {
+      "properties": {
+        "accessCode": {
+          "type": "boolean",
+          "description": "Defines the kind of Identification"
+        }
+      }
+    },
+    "SignerInfo": {
+      "properties": {
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Signer ID."
+        },
+        "title": {
+          "type": "string",
+          "description": "Signer title."
+        },
+        "step": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Step number."
+        },
+        "uid": {
+          "type": "string",
+          "description": "Signer UUID."
+        },
+        "name": {
+          "type": "string",
+          "description": "Signer name."
+        },
+        "email": {
+          "type": "string",
+          "description": "Signer e-mail."
+        },
+        "individualIdentificationCode": {
+          "type": "string",
+          "description": "Signer individual identification code."
+        }
+      }
+    },
+    "ElectronicSignerInfo": {
+      "properties": {
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Signer ID."
+        },
+        "title": {
+          "type": "string",
+          "description": "Signer title."
+        },
+        "step": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Step number."
+        },
+        "uid": {
+          "type": "string",
+          "description": "Signer UUID."
+        },
+        "name": {
+          "type": "string",
+          "description": "Signer name."
+        },
+        "email": {
+          "type": "string",
+          "description": "Signer e-mail."
+        },
+        "individualIdentificationCode": {
+          "type": "string",
+          "description": "Signer individual identification code."
+        },
+        "inPerson": {
+          "type": "boolean",
+          "description": "Defines if the signature will be In Person or Remote"
+        },
+        "identificationType": {
+          "$ref": "#/definitions/ElectronicIdentificationTypeInfo"
+        },
+        "accessCode": {
+          "type": "string",
+          "description": "Access Code to identification."
+        }
+      }
+    },
+    "ServerSignerInfo": {
+      "properties": {
+        "step": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Step number."
+        },
+        "certificateId": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Certificate ID."
+        }
+      }
+    },
+    "SenderInfo": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Sender name."
+        },
+        "email": {
+          "type": "string",
+          "description": "Sender e-mail."
+        },
+        "individualIdentificationCode": {
+          "type": "string",
+          "description": "Sender individual identification code."
+        }
+      }
+    },
+    "RepresentativeInfo": {
+      "properties": {
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Signer ID."
+        },
+        "title": {
+          "type": "string",
+          "description": "Signer title."
+        },
+        "step": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Step number."
+        },
+        "signatureDeadlineInWorkdays": {
+          "type": "string",
+          "description": "Signer name."
+        },
+        "signatureDeadlineDate": {
+          "type": "string",
+          "description": "Signer e-mail."
+        }
+      }
+    },
+    "ObserverInfo": {
+      "properties": {
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Signer ID."
+        },
+        "uid": {
+          "type": "string",
+          "description": "Signer UUID."
+        },
+        "name": {
+          "type": "string",
+          "description": "Signer name."
+        },
+        "email": {
+          "type": "string",
+          "description": "Signer e-mail."
+        },
+        "individualIdentificationCode": {
+          "type": "string",
+          "description": "Signer individual identification code."
+        }
+      }
+    },
+    "DocumentRecipients": {
+      "properties": {
+        "emails": {
+          "type": "string",
+          "description": "Emails comma-separated."
+        },
+        "attached": {
+          "type": "boolean",
+          "description": "Attach the document."
+        }
+      }
+    },
+    "DocumentNotifications": {
+      "properties": {
+        "emails": {
+          "type": "string",
+          "description": "Emails comma-separated."
+        },
+        "message": {
+          "type": "string",
+          "description": "Notification message."
+        }
+      }
+    },
+    "DocumentCreateResponse": {
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Id for the uploaded Document."
+        },
+        "signUrl": {
+          "type": "string",
+          "description": "The first signer's URL"
+        },
+        "inProcessing": {
+          "type": "boolean",
+          "description": "Indicates if signature still be processing in background"
+        }
+      }
+    },
+    "DocumentListResponse": {
+      "properties": {
+        "total": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Number of documents."
+        },
+        "documents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DocumentSimpleResponse"
+          }
+        }
+      }
+    },
+    "DocumentSimpleResponse": {
+      "properties": {
+        "id": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Document ID."
+        },
+        "name": {
+          "type": "string",
+          "description": "Document name."
+        },
+        "requiredSignatureId": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Document required signature ID"
+        },
+        "excluded": {
+          "type": "boolean",
+          "description": "If document has been excluded."
+        },
+        "key": {
+          "type": "string",
+          "description": "Document Key"
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "Document creation date."
+        },
+        "modified": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Document last modification date."
+        },
+        "dossier": {
+          "$ref": "#/definitions/Dossier"
+        },
+        "company": {
+          "type": "string",
+          "description": "Document company."
+        },
+        "extension": {
+          "type": "string",
+          "description": "Document extension"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Document tags."
+        },
+        "blocked": {
+          "type": "boolean",
+          "description": "Document blocked"
+        },
+        "linkFrame": {
+          "type": "string",
+          "description": "Document link frame"
+        }
+      }
+    },
+    "Dossier": {
+      "properties": {
+        "id": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "DocumentPackageResponse": {
+      "properties": {
+        "bytes": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "description": "Document package as byte array."
+        },
+        "name": {
+          "type": "string",
+          "description": "Document package name."
+        },
+        "mimeType": {
+          "type": "string",
+          "description": "Document multimedia type."
+        }
+      }
+    },
+    "DocumentVersionAdd": {
+      "properties": {
+        "id": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Document id."
+        },
+        "upload": {
+          "$ref": "#/definitions/DocumentUploadInfo"
+        },
+        "bytes": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "description": "If you want to directly send the byte version."
+        }
+      }
+    },
+    "DossierCreate": {
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Dossier name."
+        }
+      }
+    },
+    "DossierCreateResponse": {
+      "properties": {
+        "id": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Dossier generated ID."
+        },
+        "name": {
+          "type": "string",
+          "description": "Dossier name."
+        }
+      }
+    },
+    "DocumentCreateBatch": {
+      "required": [
+        "documents"
+      ],
+      "properties": {
+        "documents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DocumentCreate"
+          },
+          "description": "List of documents."
+        }
+      }
+    },
+    "DocumentReject": {
+      "required": [
+        "documentId",
+        "reason",
+        "rejected"
+      ],
+      "properties": {
+        "documentId": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Dociment ID."
+        },
+        "reason": {
+          "type": "string",
+          "description": "reason to reject the document."
+        },
+        "rejected": {
+          "type": "boolean",
+          "description": "If the document is rejected or not."
+        },
+        "signRequiredId": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Must be provided if the user did not send a token or is not logged in."
+        }
+      }
+    },
+    "FlowActionTakenByUser": {
+      "properties": {
+        "date": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "actionTaken": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Signer ID."
+        },
+        "uid": {
+          "type": "string",
+          "description": "Signer UUID."
+        },
+        "name": {
+          "type": "string",
+          "description": "Signer name."
+        },
+        "email": {
+          "type": "string",
+          "description": "Signer e-mail."
+        },
+        "individualIdentificationCode": {
+          "type": "string",
+          "description": "Signer individual identification code."
+        }
+      }
+    },
+    "FlowActionUserPowerGroup": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Group name."
+        },
+        "quantity": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "users": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/FlowActionTakenByUser"
+          }
+        }
+      }
+    },
+    "FlowActionUserPowerRule": {
+      "properties": {
+        "groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/FlowActionUserPowerGroup"
+          }
+        }
+      }
+    },
+    "FlowActionUserPower": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/FlowActionUserPowerRule"
+          }
+        }
+      }
+    },
+    "FlowAction": {
+      "properties": {
+        "id": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Action ID."
+        },
+        "user": {
+          "$ref": "#/definitions/ObserverInfo"
+        },
+        "powers": {
+          "$ref": "#/definitions/FlowActionUserPower"
+        },
+        "dateLimit": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "title": {
+          "type": "string"
+        },
+        "role": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "actionTaken": {
+          "type": "boolean"
+        },
+        "link": {
+          "type": "string"
+        },
+        "linkFrame": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "signedBeforeLimit": {
+          "type": "boolean"
+        },
+        "nameCompany": {
+          "type": "string"
+        }
+      }
+    },
+    "Step": {
+      "properties": {
+        "order": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "status": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "attendees": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/FlowAction"
+          }
+        }
+      }
+    },
+    "DocumentFlowActionsResponse": {
+      "properties": {
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Step"
+          }
+        },
+        "notifiedList": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "recipients": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "orderly": {
+          "type": "boolean"
+        }
+      }
+    },
+    "SignatureVerifierEvaluation": {
+      "required": [
+        "signatureFileName"
+      ],
+      "properties": {
+        "signatureFileName": {
+          "type": "string",
+          "description": "UploadId of uploaded signature file."
+        }
+      },
+      "example": {
+        "signatureFileName": "verificador/126532-2471a2c5-b7f7-44ca-8aef-fdf31090f61f/PDF-Teste.p7s"
+      }
+    },
+    "SignatureVerifierEvaluationResponse": {
+      "properties": {
+        "isCades": {
+          "type": "boolean",
+          "description": ""
+        },
+        "isXades": {
+          "type": "boolean",
+          "description": ""
+        },
+        "isPades": {
+          "type": "boolean",
+          "description": ""
+        },
+        "isAttached": {
+          "type": "boolean",
+          "description": ""
+        },
+        "isDetached": {
+          "type": "boolean",
+          "description": ""
+        },
+        "isEnveloped": {
+          "type": "boolean",
+          "description": ""
+        },
+        "isEnveloping": {
+          "type": "boolean",
+          "description": ""
+        },
+        "needsOriginalFile": {
+          "type": "boolean",
+          "description": ""
+        },
+        "needsSignerCertificate": {
+          "type": "boolean",
+          "description": ""
+        },
+        "isValidFile": {
+          "type": "boolean",
+          "description": "Returns if file is valid for signature verification."
+        },
+        "packageErrors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ErrorInfo"
+          }
+        }
+      }
+    },
+    "SignatureVerifierValidate": {
+      "required": [
+        "signatureFileName"
+      ],
+      "properties": {
+        "signatureFileName": {
+          "type": "string",
+          "description": "UploadId of uploaded signature file"
+        },
+        "documentFileName": {
+          "type": "string",
+          "description": "Filename desired for original file, extracted from signature file and made available in the response in attribute signedContentS3Path if extractOriginalContent=true"
+        },
+        "detailsLevel": {
+          "type": "integer",
+          "format": "int32",
+          "description": "1 - Basic (default) / 2 - Advanced / 3 - Complete"
+        },
+        "generateReport": {
+          "type": "boolean",
+          "description": "If true, generates report of verification, and makes it available in the response in attribute reportS3Path"
+        },
+        "extractOriginalContent": {
+          "type": "boolean",
+          "description": "If true, extracts original file from signature file and makes it available in the response in attribute signedContentS3Path"
+        }
+      },
+      "example": {
+        "signatureFileName": "verificador/126532-ff815dc9-a22b-4f7b-83c5-336d1752c6eb/PDF-Teste-Assinado.p7s",
+        "documentFileName": "",
+        "detailsLevel": 1,
+        "generateReport": false,
+        "extractOriginalContent": false
+      }
+    },
+    "SignatureVerifierValidateResponse": {
+      "properties": {
+        "documentStatus": {
+          "$ref": "#/definitions/DocumentStatus"
+        },
+        "validationSignatures": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ErrorInfo"
+          }
+        },
+        "generalWarnings": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "signedContentS3Path": {
+          "type": "string",
+          "description": ""
+        },
+        "signedFileName": {
+          "type": "string",
+          "description": ""
+        },
+        "signedFileType": {
+          "type": "string",
+          "description": ""
+        },
+        "reportS3Path": {
+          "type": "string",
+          "description": ""
+        },
+        "reportFileName": {
+          "type": "string",
+          "description": ""
+        }
+      }
+    },
+    "DocumentStatus": {
+      "properties": {
+        "status": {
+          "type": "integer",
+          "format": "int32",
+          "description": "1 - V�lido / 2 - Inv�lido / 3 - Indefinido / 4 - Alerta"
+        },
+        "textualValue": {
+          "type": "string",
+          "description": ""
+        }
+      }
+    },
+    "ErrorInfo": {
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The error code."
+        },
+        "message": {
+          "type": "string",
+          "description": "The error message."
+        },
+        "detail": {
+          "type": "string",
+          "description": "The error description."
+        },
+        "modelState": {
+          "type": "string"
+        }
+      }
+    },
+    "DocumentIdentificationRequest": {
+      "properties": {
+        "documentFrontId": {
+          "type": "string",
+          "description": "Front image id returned in Upload Api."
+        },
+        "documentBackId": {
+          "type": "string",
+          "description": "Back image id returned in Upload Api."
+        },
+        "typeOfDocument": {
+          "type": "string",
+          "description": "Type of document (RG, CNH, OAB, DriverLicense - USA Only)."
+        }
+      }
+    },
+    "PersonalDocumentIdentificationResponse": {
+      "description": "All properties are optionals. And some properties can be not returneds by the type of document.",
+      "properties": {
+        "rgNumber": {
+          "type": "string",
+          "example": "string"
+        },
+        "dlNumber": {
+          "type": "string",
+          "example": "string"
+        },
+        "expirationDate": {
+          "type": "string",
+          "format": "string"
+        },
+        "category": {
+          "type": "string",
+          "example": "string"
+        },
+        "controlNumber": {
+          "type": "string",
+          "example": "string"
+        },
+        "firstLicenseDate": {
+          "type": "string",
+          "example": "string"
+        },
+        "birthCity": {
+          "type": "string",
+          "example": "string"
+        },
+        "documentNumber": {
+          "type": "string",
+          "example": "string"
+        },
+        "organDonor": {
+          "type": "string",
+          "example": "string"
+        },
+        "copy": {
+          "type": "string",
+          "example": "string"
+        },
+        "issuanceDate": {
+          "type": "string",
+          "example": "string"
+        },
+        "registrationNumber": {
+          "type": "string",
+          "example": "string"
+        },
+        "dateOfIssue": {
+          "type": "string",
+          "example": "string"
+        },
+        "comments": {
+          "type": "string",
+          "example": "string"
+        },
+        "frontalNumber": {
+          "type": "string",
+          "example": "string"
+        },
+        "name": {
+          "type": "string",
+          "example": "string"
+        },
+        "fatherName": {
+          "type": "string",
+          "example": "string"
+        },
+        "motherName": {
+          "type": "string",
+          "example": "string"
+        },
+        "birthDate": {
+          "type": "string",
+          "example": "string"
+        },
+        "cpf": {
+          "type": "string",
+          "example": "string"
+        },
+        "lowQuality": {
+          "type": "string",
+          "example": "string"
+        },
+        "familyName": {
+          "type": "string",
+          "example": "string"
+        },
+        "givenName": {
+          "type": "string",
+          "example": "string"
+        },
+        "dob": {
+          "type": "string",
+          "example": "string"
+        },
+        "sex": {
+          "type": "string",
+          "example": "string"
+        },
+        "dateOfExpiry": {
+          "type": "string",
+          "example": "string"
+        },
+        "custumerIdentifier": {
+          "type": "string",
+          "example": "string"
+        },
+        "documentDescriminator": {
+          "type": "string",
+          "example": "string"
+        },
+        "cardholderAddress": {
+          "type": "string",
+          "example": "string"
+        },
+        "vehicleClassifications": {
+          "type": "string",
+          "example": "string"
+        },
+        "endorsements": {
+          "type": "string",
+          "example": "string"
+        },
+        "restrictions": {
+          "type": "string",
+          "example": "string"
+        },
+        "height": {
+          "type": "string",
+          "example": "string"
+        },
+        "eyeColor": {
+          "type": "string",
+          "example": "string"
+        },
+        "hairColor": {
+          "type": "string",
+          "example": "string"
+        },
+        "placeOfBirth": {
+          "type": "string",
+          "example": "string"
+        },
+        "dateOfFirstIssue": {
+          "type": "string",
+          "example": "string"
+        },
+        "expiryDateForVehicleClassification": {
+          "type": "string",
+          "example": "string"
+        },
+        "weight": {
+          "type": "string",
+          "example": "string"
+        },
+        "generalRegistry": {
+          "type": "string",
+          "example": "string"
+        },
+        "expDate": {
+          "type": "string",
+          "example": "string"
+        },
+        "nationality": {
+          "type": "string",
+          "example": "string"
+        },
+        "observation": {
+          "type": "string",
+          "example": "string"
+        },
+        "issuancePlace": {
+          "type": "string",
+          "example": "string"
+        },
+        "securityNumber": {
+          "type": "string",
+          "example": "string"
+        },
+        "renachNumber": {
+          "type": "string",
+          "example": "string"
+        }
+      }
+    }
+  }
+}
