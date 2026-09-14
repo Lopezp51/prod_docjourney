@@ -210,6 +210,8 @@ class EnvelopeModel:
     provider: ProviderType = ProviderType.CERTISIGN
     envelope_status: EnvelopeStatus = EnvelopeStatus.DRAFT
     allow_signature_order: bool = False
+    is_altered: bool = False
+    replaced_by_external_id: Optional[str] = None
     sent_at: Optional[datetime] = None
     expired_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
@@ -246,6 +248,16 @@ class EnvelopeModel:
     def permitir_ordem_assinatura(self) -> bool:
         """Alias retrocompatível."""
         return self.allow_signature_order
+
+    @property
+    def foi_alterado(self) -> bool:
+        """Alias retrocompatível."""
+        return self.is_altered
+
+    @property
+    def substituido_por_id_externo(self) -> Optional[str]:
+        """Alias retrocompatível."""
+        return self.replaced_by_external_id
 
     @property
     def data_envio(self) -> Optional[datetime]:

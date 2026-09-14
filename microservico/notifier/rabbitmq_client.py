@@ -79,9 +79,9 @@ class RabbitMQClient:
                 host=self.host,
                 port=self.port,
                 credentials=credentials,
-                connection_attempts=2,
-                retry_delay=1,
-                socket_timeout=5
+                connection_attempts=1,
+                retry_delay=0.5,
+                socket_timeout=1
             )
             self._connection = pika.BlockingConnection(parameters)
             self._channel = self._connection.channel()
@@ -89,7 +89,7 @@ class RabbitMQClient:
             self._is_live_connection = True
             return self._channel
         except Exception as err:
-            logger.warning(f"Não foi possível abrir canal AMQP persistente ({err}).")
+            logger.info(f"Broker RabbitMQ offline no host {self.host}:{self.port}. Operando em modo Mock Queue em memória.")
             self._is_live_connection = False
             self._connection = None
             self._channel = None

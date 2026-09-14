@@ -198,3 +198,57 @@ def test_external_status_notifier_client():
     )
     success = client.notify_status_change(payload)
     assert success is True
+
+
+def test_envelope_mark_altered_and_query(db_manager):
+    """Testa a marcação de alteração (mark_altered), flags is_altered e buscas por ID externo."""
+    proc_repo = ProcessRepository(db_manager)
+    journey_repo = JourneyRepository(db_manager)
+    env_repo = EnvelopeRepository(db_manager)
+
+    proc = proc_repo.get_or_create(name="Processo Alteração Canal")
+    journey = journey_repo.create_journey(proc.id, "mongo_alterado_01", 300001, {})
+
+    # 1. Cria envelope versão 1
+    env_v1 = env_repo.create_envelope(
+        request_id=journey.id,
+        document_scope_hash="hash_escopo_inicial",
+        envelope_version=1
+    )
+    env_repo.update_external_id(env_v1.id, "openapi_env_original_123", EnvelopeStatus.PENDING_SIGNATURE)
+
+    # Verifica estado inicial
+    fetched_v1 = env_repo.get_by_id(env_v1.id)
+    assert fetched_v1.is_altered is False
+    assert fetched_v1.replaced_by_external_id is None
+    assert fetched_v1.envelope_status == EnvelopeStatus.PENDING_SIGNATURE
+
+    # 2. Marca como alterado substituído por novo ID externo
+    novo_id_externo = "openapi_env_novo_456"
+    env_repo.mark_altered(env_v1.id, new_external_id=novo_id_externo)
+
+    fetched_altered = env_repo.get_by_id(env_v1.id)
+    assert fetched_altered.is_altered is True
+    assert fetched_altered.envelope_status == EnvelopeStatus.ALTERADO
+    assert fetched_altered.replaced_by_external_id == novo_id_externo
+
+    # 3. Cria envelope versão 2 com o novo ID
+    env_v2 = env_repo.create_envelope(
+        request_id=journey.id,
+        document_scope_hash="hash_escopo_inicial",
+        envelope_version=2
+    )
+    env_repo.update_external_id(env_v2.id, novo_id_externo, EnvelopeStatus.PENDING_SIGNATURE)
+
+    # 4. Busca por get_latest_active_by_request deve retornar v2 e não o alterado v1
+    latest_active = env_repo.get_latest_active_by_request(journey.id)
+    assert latest_active is not None
+    assert latest_active.id == env_v2.id
+    assert latest_active.envelope_version == 2
+    assert latest_active.is_altered is False
+
+    # 5. Busca por get_by_external_id
+    by_ext = env_repo.get_by_external_id(novo_id_externo)
+    assert by_ext is not None
+    assert by_ext.id == env_v2.id
+

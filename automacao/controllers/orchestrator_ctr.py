@@ -7,6 +7,7 @@ Nomes de classes, métodos e variáveis 100% em inglês com docstrings explicati
 import json
 from datetime import datetime
 from typing import Dict, Any, List, Tuple
+from uuid import UUID
 
 from automacao.domain.models import SignerData, AttachmentData
 from automacao.domain.exceptions import BaseFlowException, CorruptedDocumentError
@@ -14,7 +15,7 @@ from automacao.core.validator import TaskPayloadValidator
 from automacao.core.clusterizer import DocumentScopeClusterizer
 from automacao.core.envelope_manager import EnvelopeLifecycleManager
 
-from microservico.domain.enums import JourneyStatus, MaintenanceReason
+from microservico.domain.enums import JourneyStatus, MaintenanceReason, AutomationNode
 from microservico.infrastructure.db import DatabaseManager
 from microservico.infrastructure.repositories import (
     ProcessRepository,
@@ -192,21 +193,53 @@ class OrchestratorController:
 
     def execute_workflow(self, task_payload: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Executa o fluxo íntegro e orquestrado da automação para a tarefa informada.
+        Ponto de entrada do orquestrador RPA com roteamento dinâmico por Nodos (12 a 16).
 
-        Passos:
-        1. Parseamento dos signatários e anexos.
-        2. Pré-validação com acúmulo de pendências em BulkValidationError.
-        3. Agrupamento em clusters de envelopes por escopo documental.
-        4. Criação da jornada idempotente no banco relacional.
-        5. Disparo das criações e uploads multipart na OpenAPI v2.
+        Nodos suportados:
+            12: CRIAR_ENVELOPE (padrão) - Validação, clusterização e criação inicial.
+            13: ATUALIZAR_METODO_ASSINATURA - Troca de método via PUT (Presencial, WhatsApp, E-mail).
+            14: TROCAR_ASSINANTES - Substituição seletiva por novos signatários.
+            15: TROCAR_DOCUMENTO - Substituição seletiva por novos documentos.
+            16: CANCELAR_ENVELOPE - Cancelamento do envelope ativo na OpenAPI e banco.
 
         Parâmetros:
-            task_payload (Dict[str, Any]): Dados recebidos da tarefa do processo.
+            task_payload (Dict[str, Any]): Dados recebidos da esteira Fluid / MongoDB.
 
         Retorno:
-            Dict[str, Any]: Resumo da execução contendo status, ID da jornada e envelopes criados.
+            Dict[str, Any]: Resumo da execução contendo status, nodo, ID da jornada e envelopes.
         """
+        nodo_raw = task_payload.get("nodo") or task_payload.get("id_nodo") or AutomationNode.CREATE_ENVELOPE.value
+        try:
+            nodo = AutomationNode(int(nodo_raw))
+        except (ValueError, TypeError):
+            nodo = AutomationNode.CREATE_ENVELOPE
+
+        if nodo == AutomationNode.UPDATE_SIGNATURE_METHOD:
+            return self._handle_update_signature_method(task_payload)
+        elif nodo == AutomationNode.CHANGE_SIGNERS:
+            return self._handle_cluster_workflow(task_payload, nodo=AutomationNode.CHANGE_SIGNERS, event_type="SIGNERS_CHANGED")
+        elif nodo == AutomationNode.CHANGE_DOCUMENTS:
+            return self._handle_cluster_workflow(task_payload, nodo=AutomationNode.CHANGE_DOCUMENTS, event_type="DOCUMENTS_CHANGED")
+        elif nodo == AutomationNode.CANCEL_ENVELOPE:
+            return self._handle_cancel_envelope(task_payload)
+        else:
+            return self._handle_create_envelope(task_payload)
+
+    def _handle_create_envelope(self, task_payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Executa o fluxo padrão de criação de envelope (Nodo 12)."""
+        return self._handle_cluster_workflow(
+            task_payload,
+            nodo=AutomationNode.CREATE_ENVELOPE,
+            event_type="ENVELOPE_PROCESSED"
+        )
+
+    def _handle_cluster_workflow(
+        self,
+        task_payload: Dict[str, Any],
+        nodo: AutomationNode,
+        event_type: str = "ENVELOPE_PROCESSED"
+    ) -> Dict[str, Any]:
+        """Processa fluxos baseados em clusterização (Nodos 12, 14 e 15)."""
         mongo_id = str(task_payload.get("_id", {}).get("$oid") or task_payload.get("_id") or "mongo_default_id")
         process_number = task_payload.get("num_processo", 0)
         process_name = task_payload.get("nome_processo", "Processo Genérico")
@@ -219,8 +252,6 @@ class OrchestratorController:
         try:
             self.validator.validate_task_data(signers, attachments)
         except BaseFlowException as err:
-            # Garante que a jornada seja persistida no banco com status FAILED
-            # e a ocorrência impeditiva seja registrada para auditoria em maintenance_history
             process = self.process_repo.get_or_create(name=process_name)
             journey = self.journey_repo.create_journey(
                 process_id=process.id,
@@ -242,7 +273,6 @@ class OrchestratorController:
                 detailed_description="; ".join(err.errors)
             )
 
-            # Notifica falha na fila RabbitMQ
             self.rabbitmq_client.publish_message({
                 "event_type": "VALIDATION_FAILED",
                 "process_number": process_number,
@@ -277,13 +307,14 @@ class OrchestratorController:
             )
             envelopes_processed.append(env_res)
 
-            # 6. Notifica o RabbitMQ para cada envelope criado/substituído
+            # Notifica o RabbitMQ
             self.rabbitmq_client.publish_message({
-                "event_type": "ENVELOPE_PROCESSED",
+                "event_type": event_type,
+                "nodo": nodo.value,
                 "process_number": process_number,
                 "process_name": process_name,
                 "journey_id": str(journey.id),
-                "envelope_id": str(env_res.get("envelope_id")),
+                "envelope_id": str(env_res.get("envelope_id") or env_res.get("envelope_db_id")),
                 "external_envelope_id": env_res.get("external_envelope_id"),
                 "status": str(env_res.get("status")),
                 "version": env_res.get("version"),
@@ -294,8 +325,108 @@ class OrchestratorController:
 
         return {
             "status": "SUCESSO",
+            "nodo": nodo.value,
             "journey_id": str(journey.id),
             "process_number": process_number,
             "clusters_count": len(clusters),
             "envelopes": envelopes_processed
+        }
+
+    def _handle_update_signature_method(self, task_payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Executa a alteração de canal/método de assinatura via PUT (Nodo 13)."""
+        mongo_id = str(task_payload.get("_id", {}).get("$oid") or task_payload.get("_id") or "mongo_default_id")
+        process_number = task_payload.get("num_processo", 0)
+        process_name = task_payload.get("nome_processo", "Processo Genérico")
+        initial_id = task_payload.get("id_inicial")
+
+        signers, _ = self.parse_mongo_payload(task_payload)
+
+        process = self.process_repo.get_or_create(name=process_name)
+        journey = self.journey_repo.create_journey(
+            process_id=process.id,
+            mongo_id=mongo_id,
+            process_number=process_number,
+            fluid_payload=task_payload,
+            initial_id=initial_id
+        )
+
+        result = self.lifecycle_manager.update_signature_method(
+            request_id=journey.id,
+            process_number=process_number,
+            signers=signers
+        )
+
+        self.rabbitmq_client.publish_message({
+            "event_type": "SIGNATURE_METHOD_UPDATED",
+            "nodo": AutomationNode.UPDATE_SIGNATURE_METHOD.value,
+            "process_number": process_number,
+            "process_name": process_name,
+            "journey_id": str(journey.id),
+            "old_envelope_id": result.get("old_envelope_id"),
+            "old_external_id": result.get("old_external_id"),
+            "new_envelope_id": result.get("new_envelope_id"),
+            "new_external_id": result.get("new_external_id"),
+            "version": result.get("version"),
+            "signers_count": result.get("signers_count"),
+            "timestamp": datetime.now().isoformat()
+        })
+
+        return {
+            "status": "SUCESSO",
+            "nodo": AutomationNode.UPDATE_SIGNATURE_METHOD.value,
+            "journey_id": str(journey.id),
+            "process_number": process_number,
+            **result
+        }
+
+    def _handle_cancel_envelope(self, task_payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Executa o cancelamento explícito do envelope na API e banco (Nodo 16)."""
+        mongo_id = str(task_payload.get("_id", {}).get("$oid") or task_payload.get("_id") or "mongo_default_id")
+        process_number = task_payload.get("num_processo", 0)
+        process_name = task_payload.get("nome_processo", "Processo Genérico")
+        initial_id = task_payload.get("id_inicial")
+        motivo = task_payload.get("motivo_cancelamento", "Cancelamento solicitado via esteira Fluid")
+
+        process = self.process_repo.get_or_create(name=process_name)
+        journey = self.journey_repo.create_journey(
+            process_id=process.id,
+            mongo_id=mongo_id,
+            process_number=process_number,
+            fluid_payload=task_payload,
+            initial_id=initial_id
+        )
+
+        result = self.lifecycle_manager.cancel_active_envelope(
+            request_id=journey.id,
+            process_number=process_number,
+            reason=motivo
+        )
+
+        # Loga no histórico de manutenção
+        env_uuid = UUID(result["envelope_id"]) if result.get("envelope_id") else None
+        self.maintenance_repo.log_maintenance(
+            request_id=journey.id,
+            envelope_id=env_uuid,
+            reason_code=MaintenanceReason.DOC_VERSION_CHANGE,
+            detailed_description=f"Envelope cancelado via Nodo 16: {motivo}"
+        )
+
+        self.rabbitmq_client.publish_message({
+            "event_type": "ENVELOPE_CANCELED",
+            "nodo": AutomationNode.CANCEL_ENVELOPE.value,
+            "process_number": process_number,
+            "process_name": process_name,
+            "journey_id": str(journey.id),
+            "envelope_id": result.get("envelope_id"),
+            "external_envelope_id": result.get("external_envelope_id"),
+            "reason": motivo,
+            "timestamp": datetime.now().isoformat()
+        })
+
+        return {
+            "status": "SUCESSO",
+            "nodo": AutomationNode.CANCEL_ENVELOPE.value,
+            "journey_id": str(journey.id),
+            "process_number": process_number,
+            **result
         }

@@ -64,6 +64,8 @@ CREATE TABLE IF NOT EXISTS envelopes (
     provider VARCHAR(50) NOT NULL,
     envelope_status VARCHAR(50) NOT NULL,
     allow_signature_order BOOLEAN DEFAULT FALSE,
+    is_altered BOOLEAN DEFAULT FALSE,
+    replaced_by_external_id VARCHAR(100),
     sent_at TIMESTAMP WITH TIME ZONE,
     expired_at TIMESTAMP WITH TIME ZONE,
     completed_at TIMESTAMP WITH TIME ZONE,
@@ -134,7 +136,13 @@ CREATE INDEX IF NOT EXISTS idx_associates_tax_id ON associates (tax_id);
 CREATE INDEX IF NOT EXISTS idx_journey_mongo_id ON journey_requests (mongo_id);
 CREATE INDEX IF NOT EXISTS idx_journey_process_number ON journey_requests (process_number);
 CREATE INDEX IF NOT EXISTS idx_envelopes_external_id ON envelopes (external_envelope_id);
+CREATE INDEX IF NOT EXISTS idx_envelopes_replaced_by ON envelopes (replaced_by_external_id);
 CREATE INDEX IF NOT EXISTS idx_envelopes_request_scope_hash ON envelopes (request_id, document_scope_hash);
 CREATE INDEX IF NOT EXISTS idx_envelopes_expiration ON envelopes (expired_at) WHERE envelope_status = 'PENDING_SIGNATURE';
 CREATE INDEX IF NOT EXISTS idx_envelope_signers_associate ON envelope_signers (associate_id);
 CREATE INDEX IF NOT EXISTS idx_maintenance_reason ON maintenance_history (reason_code, resolved);
+
+-- Migrações idempotentes para bancos pré-existentes
+ALTER TABLE envelopes ADD COLUMN IF NOT EXISTS is_altered BOOLEAN DEFAULT FALSE;
+ALTER TABLE envelopes ADD COLUMN IF NOT EXISTS replaced_by_external_id VARCHAR(100);
+

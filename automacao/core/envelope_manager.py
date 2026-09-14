@@ -5,10 +5,11 @@ e substituição seletiva (cancelamento com versionamento incremental da versão
 Nomes de classes, métodos e variáveis 100% em inglês com docstrings explicativas em português.
 """
 
-from typing import Dict, Any, Optional
-from uuid import UUID
+from typing import Dict, Any, Optional, List, Tuple
+from uuid import UUID, uuid4
+from datetime import datetime
 
-from automacao.domain.models import EnvelopeCluster, DocumentTypeMapping, DocumentTypeItem
+from automacao.domain.models import EnvelopeCluster, DocumentTypeMapping, DocumentTypeItem, SignerData
 from automacao.infrastructure.openapi_client import OpenApiV2Client
 from microservico.infrastructure.repositories import (
     EnvelopeRepository,
@@ -115,18 +116,10 @@ class EnvelopeLifecycleManager:
             if first_assoc_id is None:
                 first_assoc_id = assoc.id
 
+            forma, metodo, second_factor, auth_methods, val_channel, sig_type = self.map_signer_channel_and_auth(sig)
+
             # Persiste o vínculo do signatário com o envelope
             if self.signer_repo:
-                sig_type = (
-                    SignatureType.DIGITAL
-                    if "DIGITAL" in str(sig.signature_type).upper()
-                    else SignatureType.ELECTRONIC
-                )
-                val_channel = (
-                    ValidationChannel.WHATSAPP
-                    if "WHATSAPP" in str(sig.validation_channel).upper()
-                    else ValidationChannel.EMAIL
-                )
                 self.signer_repo.add_signer(
                     envelope_id=db_envelope.id,
                     associate_id=assoc.id,
@@ -144,9 +137,11 @@ class EnvelopeLifecycleManager:
                 "ddi": 55,
                 "title": [sig.role],
                 "flowRole": "ASSINAR",
-                "signatureType": sig.signature_type.upper(),
-                "secondAuthFactor": True if sig.validation_channel.upper() == "WHATSAPP" else False,
-                "authenticationMethods": [{"method": sig.validation_channel.upper()}] if sig.validation_channel else []
+                "signatureType": sig.signature_type.upper() if sig.signature_type else "ELETRONIC",
+                "secondAuthFactor": second_factor,
+                "authenticationMethods": auth_methods,
+                "formaAssinatura": forma,
+                "metodoEnvioLink": metodo
             }
             signers_payload.append(signer_dict)
 
@@ -217,4 +212,195 @@ class EnvelopeLifecycleManager:
             "version": version,
             "signers_count": len(cluster.signers),
             "attachments_count": len(cluster.attachments)
+        }
+
+    @staticmethod
+    def map_signer_channel_and_auth(sig: SignerData) -> Tuple[str, str, bool, List[Dict[str, str]], ValidationChannel, SignatureType]:
+        """
+        Mapeia a forma de assinatura, método de envio, segundo fator e métodos de autenticação conforme o canal.
+        """
+        channel_upper = (sig.validation_channel or "EMAIL").upper()
+        sig_type_enum = (
+            SignatureType.DIGITAL
+            if "DIGITAL" in str(sig.signature_type).upper()
+            else SignatureType.ELECTRONIC
+        )
+
+        if "WHATSAPP" in channel_upper:
+            forma = "PRESENCIAL"
+            metodo = "WHATSAPP"
+            auth_methods = [{"method": "WHATSAPP"}]
+            second_factor = True
+            db_channel = ValidationChannel.WHATSAPP
+        elif "PRESENCIAL" in channel_upper:
+            forma = "PRESENCIAL"
+            metodo = "PRESENCIAL"
+            auth_methods = []
+            second_factor = False
+            db_channel = ValidationChannel.IN_PERSON
+        else:
+            forma = "PRESENCIAL"
+            metodo = "EMAIL"
+            auth_methods = [{"method": "EMAIL"}]
+            second_factor = False
+            db_channel = ValidationChannel.EMAIL
+
+        return forma, metodo, second_factor, auth_methods, db_channel, sig_type_enum
+
+    def update_signature_method(
+        self,
+        request_id: UUID,
+        process_number: int,
+        signers: List[SignerData]
+    ) -> Dict[str, Any]:
+        """
+        Atualiza o método de assinatura (Presencial, WhatsApp, E-mail) de um envelope ativo via PUT.
+
+        Aplica retentativa contra o estado transitório 'Aguardando envio', marca o envelope
+        anterior como ALTERADO com flag is_altered=True, e gera o novo envelope versionado.
+
+        Parâmetros:
+            request_id (UUID): Identificador da jornada pai.
+            process_number (int): Número do processo Fluid.
+            signers (List[SignerData]): Lista de signatários com os novos métodos/canais.
+
+        Retorno:
+            Dict[str, Any]: Detalhes da operação e referências dos envelopes antigo e novo.
+        """
+        active_env = self.envelope_repo.get_latest_active_by_request(request_id)
+        if not active_env:
+            active_list = self.envelope_repo.list_active_by_request(request_id)
+            active_env = active_list[-1] if active_list else None
+
+        if not active_env:
+            raise ValueError(f"Nenhum envelope ativo encontrado para a solicitação #{process_number} (ID: {request_id}).")
+
+        old_external_id = active_env.external_envelope_id
+
+        put_signers = []
+        signers_db_data = []
+
+        for sig in signers:
+            assoc = self.associate_repo.upsert(
+                tax_id=sig.tax_id,
+                name=sig.name,
+                email=sig.email,
+                phone=sig.phone
+            )
+            forma, metodo, second_factor, auth_methods, db_channel, sig_type = self.map_signer_channel_and_auth(sig)
+
+            signer_payload_item = {
+                "id": str(assoc.id),
+                "phone": sig.phone or "",
+                "ddi": 55,
+                "email": sig.email or "",
+                "secondAuthFactor": second_factor,
+                "authenticationMethods": auth_methods,
+                "formaAssinatura": forma,
+                "metodoEnvioLink": metodo,
+                "signatureType": sig.signature_type.upper() if sig.signature_type else "ELETRONIC"
+            }
+            put_signers.append(signer_payload_item)
+            signers_db_data.append((assoc.id, sig, db_channel, sig_type))
+
+        put_payload = {
+            "id": old_external_id,
+            "tags": [f"PROCESSO_{process_number}"],
+            "comment": f"Alteração de método de assinatura para o processo #{process_number}",
+            "signers": put_signers
+        }
+
+        res_put = self.openapi_client.update_envelope(put_payload)
+        new_external_id = res_put.get("id") or f"openapi_env_alt_{uuid4().hex[:8]}"
+
+        self.envelope_repo.mark_altered(active_env.id, new_external_id)
+
+        new_version = active_env.envelope_version + 1
+        new_db_env = self.envelope_repo.create_envelope(
+            request_id=request_id,
+            document_scope_hash=active_env.document_scope_hash,
+            provider=active_env.provider,
+            envelope_version=new_version
+        )
+        self.envelope_repo.update_external_id(
+            envelope_id=new_db_env.id,
+            external_envelope_id=new_external_id,
+            status=EnvelopeStatus.PENDING_SIGNATURE
+        )
+
+        if self.document_repo:
+            old_docs = self.document_repo.list_by_envelope(active_env.id)
+            for doc in old_docs:
+                self.document_repo.add_document(
+                    envelope_id=new_db_env.id,
+                    associate_id=doc.associate_id,
+                    file_name=doc.file_name,
+                    source_hash=doc.source_hash,
+                    document_type_id=doc.document_type_id,
+                    extension=doc.extension
+                )
+
+        if self.signer_repo:
+            for assoc_id, sig, db_channel, sig_type in signers_db_data:
+                self.signer_repo.add_signer(
+                    envelope_id=new_db_env.id,
+                    associate_id=assoc_id,
+                    signer_role=sig.role,
+                    signature_order=sig.order,
+                    signature_type=sig_type,
+                    validation_channel=db_channel
+                )
+
+        return {
+            "status": "SUCESSO",
+            "action": "UPDATE_SIGNATURE_METHOD",
+            "old_envelope_id": str(active_env.id),
+            "old_external_id": old_external_id,
+            "new_envelope_id": str(new_db_env.id),
+            "new_external_id": new_external_id,
+            "version": new_version,
+            "signers_count": len(signers)
+        }
+
+    def cancel_active_envelope(
+        self,
+        request_id: UUID,
+        process_number: int,
+        reason: str = "Cancelamento solicitado via esteira"
+    ) -> Dict[str, Any]:
+        """
+        Cancela o envelope ativo da solicitação na API externa e no banco de dados.
+
+        Parâmetros:
+            request_id (UUID): Identificador da jornada pai.
+            process_number (int): Número do processo.
+            reason (str): Justificativa do cancelamento.
+
+        Retorno:
+            Dict[str, Any]: Detalhes do envelope cancelado.
+        """
+        active_env = self.envelope_repo.get_latest_active_by_request(request_id)
+        if not active_env:
+            active_list = self.envelope_repo.list_active_by_request(request_id)
+            active_env = active_list[-1] if active_list else None
+
+        if not active_env:
+            raise ValueError(f"Nenhum envelope ativo encontrado para cancelamento no processo #{process_number}.")
+
+        if active_env.external_envelope_id:
+            self.openapi_client.delete_envelope(active_env.external_envelope_id)
+
+        now = datetime.now()
+        self.envelope_repo.db_manager.execute(
+            "UPDATE envelopes SET envelope_status = %s, updated_at = %s WHERE id = %s",
+            (EnvelopeStatus.CANCELED, now, active_env.id)
+        )
+
+        return {
+            "status": "SUCESSO",
+            "action": "CANCEL_ENVELOPE",
+            "envelope_id": str(active_env.id),
+            "external_envelope_id": active_env.external_envelope_id,
+            "envelope_status": "CANCELED",
+            "reason": reason
         }

@@ -31,6 +31,8 @@ class EnvelopeRepository(BaseRepository):
             provider=ProviderType(data["provider"]),
             envelope_status=EnvelopeStatus(data["envelope_status"]),
             allow_signature_order=bool(data.get("allow_signature_order", False)),
+            is_altered=bool(data.get("is_altered", False)),
+            replaced_by_external_id=data.get("replaced_by_external_id"),
             sent_at=data.get("sent_at"),
             expired_at=data.get("expired_at"),
             completed_at=data.get("completed_at"),
@@ -80,8 +82,8 @@ class EnvelopeRepository(BaseRepository):
         expiration = now + timedelta(days=60)
 
         self.db_manager.execute(
-            "INSERT INTO envelopes (id, request_id, document_scope_hash, envelope_version, provider, envelope_status, allow_signature_order, sent_at, expired_at, created_at, updated_at) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            "INSERT INTO envelopes (id, request_id, document_scope_hash, envelope_version, provider, envelope_status, allow_signature_order, is_altered, replaced_by_external_id, sent_at, expired_at, created_at, updated_at) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             (
                 new_id,
                 request_id,
@@ -90,6 +92,8 @@ class EnvelopeRepository(BaseRepository):
                 provider,
                 EnvelopeStatus.DRAFT,
                 allow_signature_order,
+                False,
+                None,
                 now,
                 expiration,
                 now,
@@ -105,6 +109,8 @@ class EnvelopeRepository(BaseRepository):
             provider=provider,
             envelope_status=EnvelopeStatus.DRAFT,
             allow_signature_order=allow_signature_order,
+            is_altered=False,
+            replaced_by_external_id=None,
             sent_at=now,
             expired_at=expiration,
             created_at=now,
@@ -128,7 +134,7 @@ class EnvelopeRepository(BaseRepository):
         """
         row = self.db_manager.fetch_one(
             "SELECT * FROM envelopes WHERE request_id = %s AND document_scope_hash = %s "
-            "AND envelope_status NOT IN ('CANCELED', 'REPLACED_CANCELED', 'EXPIRED')",
+            "AND envelope_status NOT IN ('CANCELED', 'REPLACED_CANCELED', 'EXPIRED', 'ALTERADO')",
             (request_id, document_scope_hash)
         )
         return self._to_model(row) if row else None
@@ -145,7 +151,7 @@ class EnvelopeRepository(BaseRepository):
         """
         rows = self.db_manager.fetch_all(
             "SELECT * FROM envelopes WHERE request_id = %s "
-            "AND envelope_status NOT IN ('CANCELED', 'REPLACED_CANCELED', 'EXPIRED') "
+            "AND envelope_status NOT IN ('CANCELED', 'REPLACED_CANCELED', 'EXPIRED', 'ALTERADO') "
             "ORDER BY envelope_version ASC",
             (request_id,)
         )
@@ -201,6 +207,54 @@ class EnvelopeRepository(BaseRepository):
             "UPDATE envelopes SET envelope_status = %s, updated_at = %s WHERE id = %s",
             (EnvelopeStatus.REPLACED_CANCELED, now, envelope_id)
         )
+
+    def mark_altered(self, envelope_id: UUID, new_external_id: str) -> None:
+        """
+        Marca um envelope anterior como alterado, registrando o ID externo do novo envelope substituto.
+
+        Parâmetros:
+            envelope_id (UUID): Identificador primário do envelope no banco.
+            new_external_id (str): Identificador externo do novo envelope retornado pela OpenAPI.
+        """
+        now = datetime.now()
+        self.db_manager.execute(
+            "UPDATE envelopes SET is_altered = %s, envelope_status = %s, replaced_by_external_id = %s, updated_at = %s WHERE id = %s",
+            (True, EnvelopeStatus.ALTERADO, new_external_id, now, envelope_id)
+        )
+
+    def get_by_external_id(self, external_envelope_id: str) -> Optional[EnvelopeModel]:
+        """
+        Recupera um envelope a partir do identificador retornado pela OpenAPI externa.
+
+        Parâmetros:
+            external_envelope_id (str): Identificador do envelope no portal/API externa.
+
+        Retorno:
+            Optional[EnvelopeModel]: Entidade do envelope encontrada ou None.
+        """
+        row = self.db_manager.fetch_one(
+            "SELECT * FROM envelopes WHERE external_envelope_id = %s",
+            (external_envelope_id,)
+        )
+        return self._to_model(row) if row else None
+
+    def get_latest_active_by_request(self, request_id: UUID) -> Optional[EnvelopeModel]:
+        """
+        Recupera o envelope mais recente e ativo (não cancelado, nem expirado, nem alterado) de uma jornada.
+
+        Parâmetros:
+            request_id (UUID): Identificador da jornada pai.
+
+        Retorno:
+            Optional[EnvelopeModel]: Instância do envelope ativo ou None.
+        """
+        row = self.db_manager.fetch_one(
+            "SELECT * FROM envelopes WHERE request_id = %s "
+            "AND envelope_status NOT IN ('CANCELED', 'REPLACED_CANCELED', 'EXPIRED', 'ALTERADO') "
+            "ORDER BY envelope_version DESC LIMIT 1",
+            (request_id,)
+        )
+        return self._to_model(row) if row else None
 
     def list_expired_over_60_days(self) -> List[EnvelopeModel]:
         """

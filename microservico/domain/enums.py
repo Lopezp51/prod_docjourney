@@ -44,6 +44,7 @@ class EnvelopeStatus(str, Enum):
     COMPLETED = "COMPLETED"
     CANCELED = "CANCELED"
     REPLACED_CANCELED = "REPLACED_CANCELED"
+    ALTERADO = "ALTERADO"
     EXPIRED = "EXPIRED"
     INTERVENTION = "INTERVENTION"
 
@@ -152,3 +153,25 @@ ProviderEnum = ProviderType
 TipoAssinaturaEnum = SignatureType
 CanalValidacaoEnum = ValidationChannel
 MotivoManutencaoEnum = MaintenanceReason
+
+
+class AutomationNode(int, Enum):
+    """
+    Identifica os nós de ação da esteira Fluid / RPA para roteamento do processamento.
+
+    Valores:
+        CREATE_ENVELOPE (12): Criação inicial de envelopes e upload de documentos.
+        UPDATE_SIGNATURE_METHOD (13): Troca de método/canal de assinatura (Presencial, WhatsApp, E-mail).
+        CHANGE_SIGNERS (14): Substituição seletiva motivada por alteração de signatários.
+        CHANGE_DOCUMENTS (15): Substituição seletiva motivada por alteração de documentos.
+        CANCEL_ENVELOPE (16): Cancelamento explícito do envelope ativo.
+    """
+    CREATE_ENVELOPE = 12
+    UPDATE_SIGNATURE_METHOD = 13
+    CHANGE_SIGNERS = 14
+    CHANGE_DOCUMENTS = 15
+    CANCEL_ENVELOPE = 16
+
+
+NodoAutomacao = AutomationNode
+

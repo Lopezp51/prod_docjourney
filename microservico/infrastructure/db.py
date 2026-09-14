@@ -210,6 +210,8 @@ class DatabaseManager:
             for line in sqlite_sql.splitlines():
                 if "WHERE envelope_status" in line or "WHERE status_envelope" in line:
                     line = line.split("WHERE")[0] + ";"
+                if "ALTER TABLE" in line and "ADD COLUMN" in line:
+                    continue
                 lines.append(line)
             clean_sql = "\n".join(lines)
             conn.executescript(clean_sql)

@@ -29,9 +29,10 @@ from microservico.infrastructure.repositories import (
     EnvelopeRepository,
     MaintenanceHistoryRepository
 )
-from microservico.domain.enums import EnvelopeStatus, MaintenanceReason, ProviderType
+from microservico.domain.enums import EnvelopeStatus, MaintenanceReason, ProviderType, AutomationNode
 from automacao.main import run_automation_task
 from automacao.controllers.orchestrator_ctr import OrchestratorController
+from automacao.infrastructure.openapi_client import OpenApiV2Client
 from microservico.notifier.client import ExternalStatusNotifierClient, StatusNotificationPayload, SignerStatusNotificationPayload
 from microservico.config import config
 
@@ -61,7 +62,8 @@ def run_all_scenarios(use_sqlite: bool = False):
         db_mgr = DatabaseManager(use_sqlite=True)
 
     initialize_database_if_empty(db_mgr)
-    controller = OrchestratorController(db_manager=db_mgr)
+    openapi_client = OpenApiV2Client(mock_mode=True if use_sqlite else False)
+    controller = OrchestratorController(db_manager=db_mgr, openapi_client=openapi_client)
     env_repo = EnvelopeRepository(db_mgr)
     journey_repo = JourneyRepository(db_mgr)
     manut_repo = MaintenanceHistoryRepository(db_mgr)
@@ -356,8 +358,126 @@ def run_all_scenarios(use_sqlite: bool = False):
     print("\n   -> Trecho do Parecer HTML retornado para a esteira Fluid:")
     print("      " + result_corrupted["parecer_fluid"][:180] + "...")
 
+    # -------------------------------------------------------------------------
+    # CENÁRIO 8: Troca de Método de Assinatura via Nodo 13 (E-mail -> WhatsApp)
+    # -------------------------------------------------------------------------
+    print_header("CENÁRIO 8: Troca de Método de Assinatura via Nodo 13 (E-mail -> WhatsApp)")
+    print("ℹ️ Enviando payload com nodo=13 para alterar canal de 'Edilson' para WhatsApp...")
+
+    payload_c8_nodo13 = {
+        "_id": {"$oid": "scen1_mongo_id_001"},
+        "num_processo": 200001,
+        "nome_processo": "Solicitação de Crédito Comercial V2",
+        "nodo": AutomationNode.UPDATE_SIGNATURE_METHOD.value,  # Nodo 13
+        "infos_envio": {
+            "atributos": {
+                "12905": [
+                    [
+                        {"id": 12909, "valor": "026.313.539-00"},
+                        {"id": 12910, "valor": "Edilson Paulo de Franca"},
+                        {"id": 12911, "valor": "Titular"},
+                        {"id": 12857, "valor": '["765 - CCB V2 Nova"]'},
+                        {"id": 12912, "valor": "WhatsApp"},  # Novo canal
+                        {"id": 12914, "valor": "(42) 99984-3189"},  # Telefone para autenticação WhatsApp
+                        {"id": 12915, "valor": "Eletrônica"}
+                    ]
+                ]
+            },
+            "anexos": [
+                {"nome": "765 - CCB V2 Nova", "hash": "hash_ccb_v2_novo", "tipo_doc_id": 765, "extensao": "pdf"}
+            ]
+        }
+    }
+
+    # Executa a troca de canal
+    res_c8 = controller.execute_workflow(payload_c8_nodo13)
+
+    old_env_c8 = env_repo.get_by_id(res_c8["old_envelope_id"])
+    new_env_c8 = env_repo.get_by_id(res_c8["new_envelope_id"])
+
+    print("🔄 RESULTADO DA TROCA DE MÉTODO DE ASSINATURA (NODO 13):")
+    print(f"   -> Ação Executada: {res_c8['action']} (Nodo {res_c8['nodo']})")
+    print(f"   1. Envelope Anterior (ID: {old_env_c8.id}):")
+    print(f"      - is_altered: {old_env_c8.is_altered} (Esperado: True)")
+    print(f"      - Status: {old_env_c8.envelope_status} (Esperado: ALTERADO)")
+    print(f"      - Substituído por ID Externo: {old_env_c8.replaced_by_external_id}")
+    print(f"   2. Novo Envelope Versionado (ID: {new_env_c8.id}):")
+    print(f"      - Versão Incremental: {new_env_c8.envelope_version} (Esperado: {old_env_c8.envelope_version + 1})")
+    print(f"      - Novo ID Externo: {new_env_c8.external_envelope_id}")
+    print(f"      - is_altered: {new_env_c8.is_altered} (Esperado: False)")
+    print(f"      - Status: {new_env_c8.envelope_status} (Esperado: PENDING_SIGNATURE)")
+
+    assert old_env_c8.is_altered is True
+    assert old_env_c8.envelope_status == EnvelopeStatus.ALTERADO
+    assert old_env_c8.replaced_by_external_id == new_env_c8.external_envelope_id
+    assert new_env_c8.is_altered is False
+
+    # -------------------------------------------------------------------------
+    # CENÁRIO 9: Resiliência contra o erro transitório 'Aguardando envio'
+    # -------------------------------------------------------------------------
+    print_header("CENÁRIO 9: Resiliência Automática contra Status 'Aguardando Envio' (Retry Backoff)")
+    print("ℹ️ Configurando cliente OpenAPI para simular 2 rejeições 'Aguardando envio' seguidas de sucesso...")
+
+    # Cria cliente OpenAPI com 2 falhas transitórias simuladas
+    openapi_resilient = OpenApiV2Client(mock_mode=True, mock_transient_retries=2)
+    controller_resilient = OrchestratorController(db_manager=db_mgr, openapi_client=openapi_resilient)
+
+    payload_c9_retry = {
+        "_id": {"$oid": "scen1_mongo_id_001"},
+        "num_processo": 200001,
+        "nome_processo": "Solicitação de Crédito Comercial V2",
+        "nodo": 13,
+        "infos_envio": {
+            "atributos": {
+                "12905": [
+                    [
+                        {"id": 12909, "valor": "026.313.539-00"},
+                        {"id": 12910, "valor": "Edilson Paulo de Franca"},
+                        {"id": 12911, "valor": "Titular"},
+                        {"id": 12857, "valor": '["765 - CCB V2 Nova"]'},
+                        {"id": 12912, "valor": "E-mail"},  # Volta para E-mail
+                        {"id": 12913, "valor": "edilson.franca@sicredi.com.br"},
+                        {"id": 12915, "valor": "Eletrônica"}
+                    ]
+                ]
+            }
+        }
+    }
+
+    res_c9 = controller_resilient.execute_workflow(payload_c9_retry)
+    print("✅ RETENTATIVA BEM-SUCEDIDA APÓS ESTADO 'AGUARDANDO ENVIO':")
+    print(f"   -> Status da Operação: {res_c9['status']}")
+    print(f"   -> Retentativas Simuladas: {openapi_resilient._current_retry_count} (Esperado: 2)")
+    print(f"   -> Novo Envelope ID Externo: {res_c9['new_external_id']}")
+    assert openapi_resilient._current_retry_count == 2
+    assert res_c9["status"] == "SUCESSO"
+
+    # -------------------------------------------------------------------------
+    # CENÁRIO 10: Cancelamento Explícito de Envelope via Nodo 16
+    # -------------------------------------------------------------------------
+    print_header("CENÁRIO 10: Cancelamento Explícito de Envelope Ativo (Nodo 16)")
+    print("ℹ️ Enviando tarefa com nodo=16 para cancelar envelope ativo da solicitação #200001...")
+
+    payload_c10_cancel = {
+        "_id": {"$oid": "scen1_mongo_id_001"},
+        "num_processo": 200001,
+        "nome_processo": "Solicitação de Crédito Comercial V2",
+        "nodo": AutomationNode.CANCEL_ENVELOPE.value,  # Nodo 16
+        "motivo_cancelamento": "Associado desistiu da operação antes da assinatura"
+    }
+
+    res_c10 = controller.execute_workflow(payload_c10_cancel)
+    canceled_env = env_repo.get_by_id(res_c10["envelope_id"])
+
+    print("🛑 RESULTADO DO CANCELAMENTO (NODO 16):")
+    print(f"   -> Ação: {res_c10['action']} (Nodo {res_c10['nodo']})")
+    print(f"   -> Envelope ID Cancelado: {canceled_env.id}")
+    print(f"   -> Status no Banco: {canceled_env.envelope_status} (Esperado: CANCELED)")
+    print(f"   -> Motivo Registrado: {res_c10['reason']}")
+    assert canceled_env.envelope_status == EnvelopeStatus.CANCELED
+
     print("\n" + "=" * 80)
-    print("🎉 SUÍTE COMPLETA DE 7 CENÁRIOS INTERATIVOS FINALIZADA COM 100% DE SUCESSO!")
+    print("🎉 SUÍTE COMPLETA DE 10 CENÁRIOS INTERATIVOS FINALIZADA COM 100% DE SUCESSO!")
     print("=" * 80)
     return True
 
