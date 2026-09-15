@@ -93,3 +93,14 @@ class AssociateRepository(BaseRepository):
             created_at=now,
             updated_at=now
         )
+
+    def get_or_create(
+        self,
+        tax_id: str,
+        name: str,
+        email: Optional[str] = None,
+        phone: Optional[str] = None
+    ) -> AssociateModel:
+        """Alias para upsert de associado."""
+        return self.upsert(tax_id=tax_id, name=name, email=email, phone=phone)
+

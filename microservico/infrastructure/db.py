@@ -14,8 +14,8 @@ from typing import Any, Dict, Generator, List, Optional, Tuple
 from uuid import UUID
 
 try:
-    import psycopg
-    from psycopg.rows import dict_row
+    import psycopg  # type: ignore
+    from psycopg.rows import dict_row  # type: ignore
 except ImportError:
     psycopg = None
     dict_row = None
@@ -56,7 +56,7 @@ class DatabaseManager:
         """
         if self.use_sqlite:
             if self._sqlite_conn is None:
-                self._sqlite_conn = sqlite3.connect(":memory:")
+                self._sqlite_conn = sqlite3.connect(":memory:", check_same_thread=False)
                 self._sqlite_conn.row_factory = sqlite3.Row
                 self._sqlite_conn.execute("PRAGMA foreign_keys = ON;")
             return self._sqlite_conn

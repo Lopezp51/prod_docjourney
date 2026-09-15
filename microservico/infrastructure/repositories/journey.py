@@ -146,3 +146,16 @@ class JourneyRepository(BaseRepository):
             "UPDATE journey_requests SET status = %s, details = %s, updated_at = %s WHERE id = %s",
             (status, details, now, journey_id)
         )
+
+    def count_by_status(self) -> dict:
+        """Retorna a contagem de jornadas agrupadas por status."""
+        rows = self.db_manager.fetch_all(
+            "SELECT status, COUNT(*) as cnt FROM journey_requests GROUP BY status"
+        )
+        return {r["status"]: int(r["cnt"]) for r in rows}
+
+    def count_total(self) -> int:
+        """Retorna a contagem total de jornadas."""
+        row = self.db_manager.fetch_one("SELECT COUNT(*) as cnt FROM journey_requests")
+        return int(row.get("cnt", 0)) if row else 0
+

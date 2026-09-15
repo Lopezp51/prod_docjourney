@@ -1,12 +1,14 @@
 """
 Módulo do Controlador Orquestrador da Automação RPA.
 Coordena a extração do payload do MongoDB, pré-validação eager, clusterização por escopo e execução na OpenAPI.
+Consome o Microsserviço de Backend exclusivamente via MicroserviceApiClient (HTTP REST),
+sem nenhuma query SQL ou import de submódulos do microsserviço.
 Nomes de classes, métodos e variáveis 100% em inglês com docstrings explicativas em português.
 """
 
 import json
 from datetime import datetime
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Optional
 from uuid import UUID
 
 from automacao.domain.models import SignerData, AttachmentData
@@ -14,20 +16,9 @@ from automacao.domain.exceptions import BaseFlowException, CorruptedDocumentErro
 from automacao.core.validator import TaskPayloadValidator
 from automacao.core.clusterizer import DocumentScopeClusterizer
 from automacao.core.envelope_manager import EnvelopeLifecycleManager
-
-from microservico.domain.enums import JourneyStatus, MaintenanceReason, AutomationNode
-from microservico.infrastructure.db import DatabaseManager
-from microservico.infrastructure.repositories import (
-    ProcessRepository,
-    JourneyRepository,
-    EnvelopeRepository,
-    AssociateRepository,
-    DocumentRepository,
-    EnvelopeSignerRepository,
-    MaintenanceHistoryRepository
-)
-from microservico.notifier.rabbitmq_client import RabbitMQClient
+from automacao.domain.enums import JourneyStatus, MaintenanceReason, AutomationNode
 from automacao.infrastructure.openapi_client import OpenApiV2Client
+from automacao.infrastructure.microservice_client import MicroserviceApiClient
 
 
 class OrchestratorController:
@@ -38,45 +29,41 @@ class OrchestratorController:
     1. Parseamento da tarefa recebida do MongoDB / Fluid.
     2. Pré-Validação Completa Antecipada ('Tudo de uma Vez').
     3. Clusterização documental por cálculo determinístico de SHA256.
-    4. Persistência de Processos e Jornadas no banco relacional.
+    4. Persistência de Processos e Jornadas via API REST do microsserviço.
     5. Submissão à OpenAPI v2 com suporte a upload multipart e substituição seletiva.
     """
 
     def __init__(
         self,
-        db_manager: DatabaseManager,
-        openapi_client: OpenApiV2Client = None,
-        rabbitmq_client: RabbitMQClient = None
+        api_client: Optional[MicroserviceApiClient] = None,
+        openapi_client: Optional[OpenApiV2Client] = None
     ):
         """
         Inicializa o controlador orquestrador e seus subsistemas.
 
         Parâmetros:
-            db_manager (DatabaseManager): Gerenciador de conexão com o banco relacional.
-            openapi_client (OpenApiV2Client): Cliente HTTP de integração com a API externa.
-            rabbitmq_client (RabbitMQClient): Cliente para mensageria e eventos no RabbitMQ.
+            api_client (Optional[MicroserviceApiClient]): Cliente REST com o microsserviço.
+            openapi_client (Optional[OpenApiV2Client]): Cliente HTTP de integração com a API externa.
         """
-        self.db_manager = db_manager
+        self.api_client = api_client or MicroserviceApiClient()
         self.openapi_client = openapi_client or OpenApiV2Client()
-
-        self.process_repo = ProcessRepository(db_manager)
-        self.journey_repo = JourneyRepository(db_manager)
-        self.envelope_repo = EnvelopeRepository(db_manager)
-        self.associate_repo = AssociateRepository(db_manager)
-        self.document_repo = DocumentRepository(db_manager)
-        self.signer_repo = EnvelopeSignerRepository(db_manager)
-        self.maintenance_repo = MaintenanceHistoryRepository(db_manager)
 
         self.validator = TaskPayloadValidator()
         self.clusterizer = DocumentScopeClusterizer()
         self.lifecycle_manager = EnvelopeLifecycleManager(
             openapi_client=self.openapi_client,
-            envelope_repo=self.envelope_repo,
-            associate_repo=self.associate_repo,
-            document_repo=self.document_repo,
-            signer_repo=self.signer_repo
+            api_client=self.api_client
         )
-        self.rabbitmq_client = rabbitmq_client or RabbitMQClient(queue_name="docjourney_status_queue")
+
+    @staticmethod
+    def _extract_mongo_id(task_payload: Dict[str, Any]) -> str:
+        """Extrai o mongo_id suportando formatos String ou Object ($oid)."""
+        raw_id = task_payload.get("_id")
+        if isinstance(raw_id, dict):
+            return str(raw_id.get("$oid") or raw_id)
+        if raw_id:
+            return str(raw_id)
+        return "mongo_default_id"
 
     def parse_mongo_payload(self, task_payload: Dict[str, Any]) -> Tuple[List[SignerData], List[AttachmentData]]:
         """
@@ -97,10 +84,9 @@ class OrchestratorController:
         # Parse de Anexos
         attachments: List[AttachmentData] = []
         for att in raw_attachments:
-            # Extração segura de tamanho de arquivo (se informado, preservando 0 como valor válido)
-            file_size_raw = att.get("tamanho")
+            file_size_raw = att.get("tamanho") if att.get("tamanho") is not None else att.get("size")
             if file_size_raw is None:
-                file_size_raw = att.get("size")
+                file_size_raw = att.get("size_bytes")
             if file_size_raw is None:
                 file_size_raw = att.get("byte_length")
 
@@ -121,9 +107,9 @@ class OrchestratorController:
 
             attachments.append(
                 AttachmentData(
-                    name=att.get("nome", "").strip(),
-                    hash_code=att.get("hash", "").strip(),
-                    doc_type_id=att.get("tipo_doc_id"),
+                    name=att.get("nome", "").strip() or att.get("name", "anexo.pdf").strip(),
+                    hash_code=att.get("hash", "").strip() or att.get("hash_sha256", "").strip(),
+                    doc_type_id=att.get("tipo_doc_id") or att.get("id_tipo_documento") or att.get("doc_type_id"),
                     extension=att.get("extensao", "pdf"),
                     binary_content=att.get("conteudo_binario") or att.get("binary_content"),
                     file_size=file_size,
@@ -132,13 +118,20 @@ class OrchestratorController:
                 )
             )
 
-        # Parse da Tabela de Assinantes (Campos de formulário Fluid: 10410 ou 12905)
-        raw_table = attributes.get("10410") or attributes.get("12905") or []
+        # Parse de Signatários (Suporta matriz Fluid 10410/12905 e lista direta de dicionários)
+        raw_table = (
+            attributes.get("10410") or
+            attributes.get("12905") or
+            dispatch_info.get("signatarios") or
+            task_payload.get("signatarios") or
+            []
+        )
         signers: List[SignerData] = []
 
         if isinstance(raw_table, list):
-            for row in raw_table:
+            for idx, row in enumerate(raw_table):
                 if isinstance(row, list):
+                    # Formato matriz do Fluid: [{"id": 12909, "valor": "..."}, ...]
                     row_fields = {
                         item["id"]: item.get("valor", "")
                         for item in row
@@ -156,7 +149,6 @@ class OrchestratorController:
 
                     docs_raw = row_fields.get(10751) or row_fields.get(11249) or row_fields.get(12857) or "[]"
 
-                    # Parse seguro de documentos vinculados ao participante
                     doc_ids = []
                     if isinstance(docs_raw, list):
                         doc_ids = [str(d) for d in docs_raw]
@@ -174,6 +166,35 @@ class OrchestratorController:
                         order = int(order_str)
                     except ValueError:
                         order = 1
+
+                    signers.append(
+                        SignerData(
+                            tax_id=str(tax_id).strip(),
+                            name=str(name).strip(),
+                            order=order,
+                            role=str(role).strip(),
+                            email=str(email).strip(),
+                            phone=str(phone).strip(),
+                            signature_type=signature_type,
+                            validation_channel=validation_channel,
+                            document_ids=doc_ids
+                        )
+                    )
+                elif isinstance(row, dict):
+                    # Formato direto de dicionário
+                    tax_id = row.get("cpf") or row.get("tax_id") or row.get("cnpj") or ""
+                    name = row.get("nome") or row.get("name") or ""
+                    role = row.get("papel") or row.get("role") or "ASSINAR"
+                    order = int(row.get("ordem") or row.get("order") or (idx + 1))
+                    email = row.get("email") or ""
+                    phone = row.get("telefone") or row.get("phone") or ""
+                    signature_type = row.get("tipo_assinatura") or row.get("signature_type") or "ELETRONIC"
+                    validation_channel = row.get("canal_validacao") or row.get("validation_channel") or "WHATSAPP"
+                    raw_docs = row.get("documentos") or row.get("document_ids") or []
+
+                    doc_ids = [str(d).strip() for d in raw_docs if d is not None]
+                    if not doc_ids:
+                        doc_ids = [str(att.doc_type_id) for att in attachments if att.doc_type_id is not None]
 
                     signers.append(
                         SignerData(
@@ -240,7 +261,7 @@ class OrchestratorController:
         event_type: str = "ENVELOPE_PROCESSED"
     ) -> Dict[str, Any]:
         """Processa fluxos baseados em clusterização (Nodos 12, 14 e 15)."""
-        mongo_id = str(task_payload.get("_id", {}).get("$oid") or task_payload.get("_id") or "mongo_default_id")
+        mongo_id = self._extract_mongo_id(task_payload)
         process_number = task_payload.get("num_processo", 0)
         process_name = task_payload.get("nome_processo", "Processo Genérico")
         initial_id = task_payload.get("id_inicial")
@@ -252,46 +273,43 @@ class OrchestratorController:
         try:
             self.validator.validate_task_data(signers, attachments)
         except BaseFlowException as err:
-            process = self.process_repo.get_or_create(name=process_name)
-            journey = self.journey_repo.create_journey(
-                process_id=process.id,
+            # Registra jornada com status de falha/intervenção via API do microsserviço
+            journey = self.api_client.get_or_create_journey(
                 mongo_id=mongo_id,
+                process_name=process_name,
                 process_number=process_number,
                 fluid_payload=task_payload,
                 initial_id=initial_id
             )
-            self.journey_repo.update_status(journey.id, JourneyStatus.FAILED)
+            self.api_client.update_journey_status(
+                journey_id=journey["id"],
+                status=JourneyStatus.FAILED,
+                details="; ".join(err.errors)
+            )
 
             reason_code = (
                 MaintenanceReason.CORRUPTED_DOCUMENT
                 if isinstance(err, CorruptedDocumentError)
                 else MaintenanceReason.INVALID_SIGNER_DATA
             )
-            self.maintenance_repo.log_maintenance(
-                request_id=journey.id,
-                reason_code=reason_code,
-                detailed_description="; ".join(err.errors)
-            )
-
-            self.rabbitmq_client.publish_message({
-                "event_type": "VALIDATION_FAILED",
-                "process_number": process_number,
-                "process_name": process_name,
-                "journey_id": str(journey.id),
-                "reason_code": reason_code.value,
-                "errors": err.errors,
-                "timestamp": datetime.now().isoformat()
-            })
+            try:
+                self.api_client.cancel_envelope_maintenance(
+                    envelope_id=journey["id"],
+                    reason_code=reason_code,
+                    detailed_description="; ".join(err.errors),
+                    canceled_by="RPA_VALIDATOR"
+                )
+            except Exception:
+                pass
             raise
 
         # 3. Clusterização por Escopo Documental
         clusters = self.clusterizer.clusterize(signers, attachments)
 
-        # 4. Persistência de Processo e Jornada no Banco
-        process = self.process_repo.get_or_create(name=process_name)
-        journey = self.journey_repo.create_journey(
-            process_id=process.id,
+        # 4. Persistência de Processo e Jornada via API REST
+        journey = self.api_client.get_or_create_journey(
             mongo_id=mongo_id,
+            process_name=process_name,
             process_number=process_number,
             fluid_payload=task_payload,
             initial_id=initial_id
@@ -301,32 +319,23 @@ class OrchestratorController:
         envelopes_processed = []
         for cluster in clusters:
             env_res = self.lifecycle_manager.process_cluster(
-                request_id=journey.id,
+                request_id=UUID(journey["id"]),
                 process_number=process_number,
                 cluster=cluster
             )
             envelopes_processed.append(env_res)
 
-            # Notifica o RabbitMQ
-            self.rabbitmq_client.publish_message({
-                "event_type": event_type,
-                "nodo": nodo.value,
-                "process_number": process_number,
-                "process_name": process_name,
-                "journey_id": str(journey.id),
-                "envelope_id": str(env_res.get("envelope_id") or env_res.get("envelope_db_id")),
-                "external_envelope_id": env_res.get("external_envelope_id"),
-                "status": str(env_res.get("status")),
-                "version": env_res.get("version"),
-                "documents_count": len(cluster.document_ids),
-                "signers_count": len(cluster.signers),
-                "timestamp": datetime.now().isoformat()
-            })
+        # 6. Atualiza jornada para SUCCESS
+        self.api_client.update_journey_status(
+            journey_id=journey["id"],
+            status=JourneyStatus.COMPLETED,
+            details=f"Processados {len(envelopes_processed)} envelopes com sucesso."
+        )
 
         return {
             "status": "SUCESSO",
             "nodo": nodo.value,
-            "journey_id": str(journey.id),
+            "journey_id": str(journey["id"]),
             "process_number": process_number,
             "clusters_count": len(clusters),
             "envelopes": envelopes_processed
@@ -334,99 +343,61 @@ class OrchestratorController:
 
     def _handle_update_signature_method(self, task_payload: Dict[str, Any]) -> Dict[str, Any]:
         """Executa a alteração de canal/método de assinatura via PUT (Nodo 13)."""
-        mongo_id = str(task_payload.get("_id", {}).get("$oid") or task_payload.get("_id") or "mongo_default_id")
+        mongo_id = self._extract_mongo_id(task_payload)
         process_number = task_payload.get("num_processo", 0)
         process_name = task_payload.get("nome_processo", "Processo Genérico")
         initial_id = task_payload.get("id_inicial")
 
         signers, _ = self.parse_mongo_payload(task_payload)
 
-        process = self.process_repo.get_or_create(name=process_name)
-        journey = self.journey_repo.create_journey(
-            process_id=process.id,
+        journey = self.api_client.get_or_create_journey(
             mongo_id=mongo_id,
+            process_name=process_name,
             process_number=process_number,
             fluid_payload=task_payload,
             initial_id=initial_id
         )
 
         result = self.lifecycle_manager.update_signature_method(
-            request_id=journey.id,
+            request_id=UUID(journey["id"]),
             process_number=process_number,
             signers=signers
         )
 
-        self.rabbitmq_client.publish_message({
-            "event_type": "SIGNATURE_METHOD_UPDATED",
-            "nodo": AutomationNode.UPDATE_SIGNATURE_METHOD.value,
-            "process_number": process_number,
-            "process_name": process_name,
-            "journey_id": str(journey.id),
-            "old_envelope_id": result.get("old_envelope_id"),
-            "old_external_id": result.get("old_external_id"),
-            "new_envelope_id": result.get("new_envelope_id"),
-            "new_external_id": result.get("new_external_id"),
-            "version": result.get("version"),
-            "signers_count": result.get("signers_count"),
-            "timestamp": datetime.now().isoformat()
-        })
-
         return {
             "status": "SUCESSO",
             "nodo": AutomationNode.UPDATE_SIGNATURE_METHOD.value,
-            "journey_id": str(journey.id),
+            "journey_id": str(journey["id"]),
             "process_number": process_number,
             **result
         }
 
     def _handle_cancel_envelope(self, task_payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Executa o cancelamento explícito do envelope na API e banco (Nodo 16)."""
-        mongo_id = str(task_payload.get("_id", {}).get("$oid") or task_payload.get("_id") or "mongo_default_id")
+        """Executa o cancelamento explícito do envelope na API externa e no microsserviço (Nodo 16)."""
+        mongo_id = self._extract_mongo_id(task_payload)
         process_number = task_payload.get("num_processo", 0)
         process_name = task_payload.get("nome_processo", "Processo Genérico")
         initial_id = task_payload.get("id_inicial")
         motivo = task_payload.get("motivo_cancelamento", "Cancelamento solicitado via esteira Fluid")
 
-        process = self.process_repo.get_or_create(name=process_name)
-        journey = self.journey_repo.create_journey(
-            process_id=process.id,
+        journey = self.api_client.get_or_create_journey(
             mongo_id=mongo_id,
+            process_name=process_name,
             process_number=process_number,
             fluid_payload=task_payload,
             initial_id=initial_id
         )
 
         result = self.lifecycle_manager.cancel_active_envelope(
-            request_id=journey.id,
+            request_id=UUID(journey["id"]),
             process_number=process_number,
             reason=motivo
         )
 
-        # Loga no histórico de manutenção
-        env_uuid = UUID(result["envelope_id"]) if result.get("envelope_id") else None
-        self.maintenance_repo.log_maintenance(
-            request_id=journey.id,
-            envelope_id=env_uuid,
-            reason_code=MaintenanceReason.DOC_VERSION_CHANGE,
-            detailed_description=f"Envelope cancelado via Nodo 16: {motivo}"
-        )
-
-        self.rabbitmq_client.publish_message({
-            "event_type": "ENVELOPE_CANCELED",
-            "nodo": AutomationNode.CANCEL_ENVELOPE.value,
-            "process_number": process_number,
-            "process_name": process_name,
-            "journey_id": str(journey.id),
-            "envelope_id": result.get("envelope_id"),
-            "external_envelope_id": result.get("external_envelope_id"),
-            "reason": motivo,
-            "timestamp": datetime.now().isoformat()
-        })
-
         return {
             "status": "SUCESSO",
             "nodo": AutomationNode.CANCEL_ENVELOPE.value,
-            "journey_id": str(journey.id),
+            "journey_id": str(journey["id"]),
             "process_number": process_number,
             **result
         }

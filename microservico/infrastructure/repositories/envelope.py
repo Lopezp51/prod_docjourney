@@ -269,3 +269,26 @@ class EnvelopeRepository(BaseRepository):
             (now,)
         )
         return [self._to_model(row) for row in rows]
+
+    def update_status(self, envelope_id: UUID, status: EnvelopeStatus) -> None:
+        """
+        Atualiza o status de um envelope.
+        """
+        now = datetime.now()
+        self.db_manager.execute(
+            "UPDATE envelopes SET envelope_status = %s, updated_at = %s WHERE id = %s",
+            (status, now, envelope_id)
+        )
+
+    def count_by_status(self) -> dict:
+        """Retorna a contagem de envelopes agrupados por status."""
+        rows = self.db_manager.fetch_all(
+            "SELECT envelope_status, COUNT(*) as cnt FROM envelopes GROUP BY envelope_status"
+        )
+        return {r["envelope_status"]: int(r["cnt"]) for r in rows}
+
+    def count_total(self) -> int:
+        """Retorna a contagem total de envelopes."""
+        row = self.db_manager.fetch_one("SELECT COUNT(*) as cnt FROM envelopes")
+        return int(row.get("cnt", 0)) if row else 0
+

@@ -1,4 +1,6 @@
-# Dependências do Microserviço Backend
+# Dependências do Microsserviço Backend & Maintenance API
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
 pydantic>=2.0.0
 psycopg[binary]>=3.1.0
 httpx>=0.24.0

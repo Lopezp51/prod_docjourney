@@ -94,3 +94,58 @@ class MaintenanceHistoryRepository(BaseRepository):
             "UPDATE maintenance_history SET resolved = TRUE, resolved_by = %s, updated_at = %s WHERE id = %s",
             (resolved_by, now, maintenance_id)
         )
+
+    def get_by_id(self, maintenance_id: UUID) -> Optional[MaintenanceHistoryModel]:
+        """
+        Recupera um registro de histórico de manutenção pelo seu UUID.
+        """
+        row = self.db_manager.fetch_one(
+            "SELECT * FROM maintenance_history WHERE id = %s",
+            (maintenance_id,)
+        )
+        return self._to_model(row) if row else None
+
+    def list_history(
+        self,
+        reason_code: Optional[str] = None,
+        resolved: Optional[bool] = None,
+        request_id: Optional[UUID] = None,
+        envelope_id: Optional[UUID] = None,
+        limit: int = 50,
+        offset: int = 0
+    ) -> list[MaintenanceHistoryModel]:
+        """
+        Lista registros de manutenção com suporte a filtros dinâmicos e paginação.
+        """
+        query = "SELECT * FROM maintenance_history WHERE 1=1"
+        params = []
+
+        if reason_code:
+            query += " AND reason_code = %s"
+            params.append(reason_code)
+        if resolved is not None:
+            query += " AND resolved = %s"
+            params.append(resolved)
+        if request_id:
+            query += " AND request_id = %s"
+            params.append(request_id)
+        if envelope_id:
+            query += " AND envelope_id = %s"
+            params.append(envelope_id)
+
+        query += " ORDER BY created_at DESC LIMIT %s OFFSET %s"
+        params.extend([limit, offset])
+
+        rows = self.db_manager.fetch_all(query, tuple(params))
+        return [self._to_model(r) for r in rows]
+
+    def count_unresolved(self) -> int:
+        """Retorna o número total de pendências de manutenção não resolvidas."""
+        row = self.db_manager.fetch_one("SELECT COUNT(*) as cnt FROM maintenance_history WHERE resolved = FALSE")
+        return int(row.get("cnt", 0)) if row else 0
+
+    def count_total(self) -> int:
+        """Retorna o número total de ocorrências de manutenção."""
+        row = self.db_manager.fetch_one("SELECT COUNT(*) as cnt FROM maintenance_history")
+        return int(row.get("cnt", 0)) if row else 0
+

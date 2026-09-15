@@ -158,6 +158,12 @@ CREATE TABLE IF NOT EXISTS maintenance_history (
 );
 
 -- ==========================================
+-- MIGRATIONS FOR PRE-EXISTING DATABASES
+-- ==========================================
+ALTER TABLE envelopes ADD COLUMN IF NOT EXISTS is_altered BOOLEAN DEFAULT FALSE;
+ALTER TABLE envelopes ADD COLUMN IF NOT EXISTS replaced_by_external_id VARCHAR(100);
+
+-- ==========================================
 -- INDEXES FOR QUERY OPTIMIZATION
 -- ==========================================
 CREATE INDEX IF NOT EXISTS idx_associates_tax_id ON associates (tax_id);
@@ -169,8 +175,4 @@ CREATE INDEX IF NOT EXISTS idx_envelopes_request_scope_hash ON envelopes (reques
 CREATE INDEX IF NOT EXISTS idx_envelopes_expiration ON envelopes (expired_at) WHERE envelope_status = 'PENDING_SIGNATURE';
 CREATE INDEX IF NOT EXISTS idx_envelope_signers_associate ON envelope_signers (associate_id);
 CREATE INDEX IF NOT EXISTS idx_maintenance_reason ON maintenance_history (reason_code, resolved);
-
--- Migrações idempotentes para bancos pré-existentes
-ALTER TABLE envelopes ADD COLUMN IF NOT EXISTS is_altered BOOLEAN DEFAULT FALSE;
-ALTER TABLE envelopes ADD COLUMN IF NOT EXISTS replaced_by_external_id VARCHAR(100);
 

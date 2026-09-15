@@ -140,6 +140,8 @@ class MaintenanceReason(str, Enum):
     SIGNER_CHANGE = "SIGNER_CHANGE"
     API_INTEGRATION_ERROR = "API_INTEGRATION_ERROR"
     CORRUPTED_DOCUMENT = "CORRUPTED_DOCUMENT"
+    MANUAL_INTERVENTION = "MANUAL_INTERVENTION"
+
 
 
 # ==============================================================================
