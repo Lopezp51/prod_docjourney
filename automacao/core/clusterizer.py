@@ -6,7 +6,8 @@ Nomes de classes, métodos e variáveis 100% em inglês com docstrings explicati
 """
 
 import hashlib
-from typing import List, Dict
+from typing import List, Dict, Optional
+from automacao.config import config
 from automacao.domain.models import SignerData, AttachmentData, EnvelopeCluster
 from automacao.domain.exceptions import EnvelopeClusterError
 
@@ -19,7 +20,19 @@ class DocumentScopeClusterizer:
     todos os signatários associados a um envelope assinam rigorosamente o mesmo conjunto de documentos.
     A quantidade de envelopes gerados é diretamente proporcional à cardinalidade de combinações
     únicas de [Signatários x Documentos].
+    Também valida se o tamanho consolidado dos documentos de cada envelope não ultrapassa o limite
+    máximo permitido (padrão: 200 MB).
     """
+
+    def __init__(self, max_envelope_size_mb: Optional[float] = None):
+        """
+        Inicializa o clusterizador com limite de tamanho por envelope configurável.
+        Padrão: 200 MB por envelope.
+        """
+        self.max_envelope_size_mb = (
+            max_envelope_size_mb if max_envelope_size_mb is not None else config.MAX_ENVELOPE_SIZE_MB
+        )
+        self.max_envelope_size_bytes = int(self.max_envelope_size_mb * 1024 * 1024)
 
     @staticmethod
     def generate_scope_hash(document_ids: List[str]) -> str:
@@ -83,6 +96,19 @@ class DocumentScopeClusterizer:
                     if doc_id_lower in att_name or att_name in doc_id_lower or doc_id == att_obj.hash_code:
                         if att_obj not in group_attachments:
                             group_attachments.append(att_obj)
+
+            # Validação do limite consolidado de tamanho do envelope (ex: 200 MB)
+            cluster_bytes = sum(
+                (att.file_size if att.file_size is not None else (len(att.binary_content) if att.binary_content else 0))
+                for att in group_attachments
+            )
+            if cluster_bytes > self.max_envelope_size_bytes:
+                size_mb = cluster_bytes / (1024 * 1024)
+                doc_names = ", ".join([att.name for att in group_attachments])
+                raise EnvelopeClusterError(
+                    f"O envelope com os documentos [{doc_names}] possui tamanho total consolidado de "
+                    f"{size_mb:.2f} MB, excedendo o limite máximo permitido de {self.max_envelope_size_mb:.0f} MB por envelope."
+                )
 
             result_clusters.append(
                 EnvelopeCluster(
