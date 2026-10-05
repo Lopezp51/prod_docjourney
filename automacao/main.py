@@ -5,16 +5,14 @@ Comunicação desacoplada exclusivamente com a API REST do Microsserviço via Mi
 Nomes de funções, parâmetros e variáveis 100% em inglês com docstrings explicativas em português.
 """
 
-import logging
 from typing import Dict, Any, Optional
 
+from automacao.logging_config import logger
 from automacao.domain.exceptions import BaseFlowException
 from automacao.controllers.orchestrator_ctr import OrchestratorController
 from automacao.infrastructure.microservice_client import MicroserviceApiClient
 from automacao.infrastructure.openapi_client import OpenApiV2Client
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-logger = logging.getLogger("RPA_Automation")
 
 
 def run_automation_task(

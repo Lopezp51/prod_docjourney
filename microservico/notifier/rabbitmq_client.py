@@ -6,7 +6,6 @@ Nomes de classes, métodos e variáveis 100% em inglês com docstrings explicati
 """
 
 import json
-import logging
 from typing import Dict, Any, Optional, List
 
 try:
@@ -14,9 +13,9 @@ try:
 except ImportError:
     pika = None
 
+from microservico.logging_config import logger
 from microservico.config import config
 
-logger = logging.getLogger("RabbitMQClient")
 
 
 class RabbitMQClient:

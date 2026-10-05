@@ -5,11 +5,11 @@ a persistência e manutenção exclusivamente através do MicroserviceApiClient 
 sem nenhuma query SQL ou import do microsserviço.
 """
 
-import logging
 from typing import Dict, Any, Optional, List, Tuple
 from uuid import UUID, uuid4
 from datetime import datetime
 
+from automacao.logging_config import logger
 from automacao.domain.models import EnvelopeCluster, DocumentTypeMapping, DocumentTypeItem, SignerData
 from automacao.infrastructure.openapi_client import OpenApiV2Client
 from automacao.infrastructure.microservice_client import MicroserviceApiClient
@@ -21,7 +21,6 @@ from automacao.domain.enums import (
     MaintenanceReason
 )
 
-logger = logging.getLogger("EnvelopeLifecycleManager")
 
 
 class EnvelopeLifecycleManager:

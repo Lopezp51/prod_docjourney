@@ -4,12 +4,12 @@ Consome mensagens e eventos de filas do RabbitMQ e sincroniza o estado dos envel
 e histórico de manutenção no banco relacional sem requisições SQL manuais.
 """
 
-import logging
 import threading
 import time
 from typing import Dict, Any, Optional, Tuple
 from uuid import UUID
 
+from microservico.logging_config import logger
 from microservico.api.dependencies import get_db_manager
 from microservico.infrastructure.repositories import (
     EnvelopeRepository,
@@ -19,8 +19,6 @@ from microservico.infrastructure.repositories import (
 from microservico.domain.enums import EnvelopeStatus, MaintenanceReason
 from microservico.notifier.rabbitmq_client import RabbitMQClient
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] [Worker]: %(message)s")
-logger = logging.getLogger("DocJourneyWorker")
 
 
 class StatusEventConsumer:
@@ -82,8 +80,9 @@ class StatusEventConsumer:
 
             return True
         except Exception as e:
-            logger.error(f"Erro ao processar mensagem do RabbitMQ: {e}", exc_info=True)
+            logger.exception(f"Erro ao processar mensagem do RabbitMQ: {e}")
             return False
+
 
     def run_polling(
         self,

@@ -40,6 +40,14 @@ class AutomationConfig:
     OPENAPI_CLIENT_ID: str = os.getenv("OPENAPI_CLIENT_ID", "mock_client_id")
     OPENAPI_ACCESS_TOKEN: str = os.getenv("OPENAPI_ACCESS_TOKEN", "mock_access_token")
 
+    # =========================================================================
+    # 3. LOGGING E OBSERVABILIDADE (LOGURU)
+    # =========================================================================
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+    LOG_DIR: str = os.getenv("LOG_DIR", "logs")
+
+
+
     @property
     def max_document_size_bytes(self) -> int:
         """Retorna o limite por arquivo convertido em bytes."""

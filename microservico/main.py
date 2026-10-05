@@ -3,17 +3,16 @@ Ponto de Entrada Principal da Aplicação FastAPI do Microsserviço DocJourney.
 Configura middlewares, ciclo de vida (lifespan), documentação Swagger OpenAPI e roteamento.
 """
 
-import logging
+import time
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
+from microservico.logging_config import logger
 from microservico.config import config
 from microservico.api.dependencies import get_db_manager
 from microservico.api.routers import health, journeys, envelopes, maintenance
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-logger = logging.getLogger("DocJourneyAPI")
 
 
 @asynccontextmanager
@@ -79,6 +78,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Middleware de observabilidade para log estruturado de requisições HTTP."""
+    start_time = time.perf_counter()
+    response = await call_next(request)
+    duration_ms = (time.perf_counter() - start_time) * 1000
+
+    # Log detalhado apenas para endpoints de negócio ou se houver erro
+    if request.url.path != "/health" or response.status_code >= 400:
+        logger.info(
+            f"HTTP {request.method} {request.url.path} | Status: {response.status_code} | Tempo: {duration_ms:.2f}ms"
+        )
+    return response
+
 
 # Registro dos Routers da API
 app.include_router(health.router)

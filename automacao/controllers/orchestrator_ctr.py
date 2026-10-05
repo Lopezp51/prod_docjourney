@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Dict, Any, List, Tuple, Optional
 from uuid import UUID
 
+from automacao.logging_config import logger
 from automacao.domain.models import SignerData, AttachmentData
 from automacao.domain.exceptions import BaseFlowException, CorruptedDocumentError
 from automacao.core.validator import TaskPayloadValidator
@@ -19,6 +20,7 @@ from automacao.core.envelope_manager import EnvelopeLifecycleManager
 from automacao.domain.enums import JourneyStatus, MaintenanceReason, AutomationNode
 from automacao.infrastructure.openapi_client import OpenApiV2Client
 from automacao.infrastructure.microservice_client import MicroserviceApiClient
+
 
 
 class OrchestratorController:
@@ -267,12 +269,17 @@ class OrchestratorController:
         initial_id = task_payload.get("id_inicial")
 
         # 1. Parseamento
+        logger.info(f"Iniciando processamento da tarefa #{process_number} (Nodo: {nodo.value}) | mongo_id: {mongo_id}")
         signers, attachments = self.parse_mongo_payload(task_payload)
+        logger.info(f"Payload parseado: {len(signers)} signatário(s), {len(attachments)} anexo(s).")
 
         # 2. Pré-Validação Completa ("Tudo de uma Vez")
+        logger.info("Iniciando pré-validação antecipada (regras de negócio e integridade)...")
         try:
             self.validator.validate_task_data(signers, attachments)
+            logger.info("Pré-validação antecipada concluída com SUCESSO (nenhum erro impeditivo).")
         except BaseFlowException as err:
+            logger.warning(f"Pré-validação REPROVADA para tarefa #{process_number}: {len(err.errors)} pendência(s) detectada(s).")
             # Registra jornada com status de falha/intervenção via API do microsserviço
             journey = self.api_client.get_or_create_journey(
                 mongo_id=mongo_id,
@@ -305,6 +312,7 @@ class OrchestratorController:
 
         # 3. Clusterização por Escopo Documental
         clusters = self.clusterizer.clusterize(signers, attachments)
+        logger.info(f"Clusterização documental SHA256: {len(clusters)} cluster(s) de envelopes gerado(s).")
 
         # 4. Persistência de Processo e Jornada via API REST
         journey = self.api_client.get_or_create_journey(
@@ -314,10 +322,12 @@ class OrchestratorController:
             fluid_payload=task_payload,
             initial_id=initial_id
         )
+        logger.info(f"Jornada persistida na API REST: ID {journey['id']} (mongo_id: {mongo_id})")
 
         # 5. Submissão dos Clusters à OpenAPI v2
         envelopes_processed = []
-        for cluster in clusters:
+        for i, cluster in enumerate(clusters, 1):
+            logger.info(f"Processando cluster {i}/{len(clusters)} (Hash: {cluster.scope_hash[:10]}... | {len(cluster.signers)} signatários, {len(cluster.documents)} docs)")
             env_res = self.lifecycle_manager.process_cluster(
                 request_id=UUID(journey["id"]),
                 process_number=process_number,
@@ -331,6 +341,7 @@ class OrchestratorController:
             status=JourneyStatus.COMPLETED,
             details=f"Processados {len(envelopes_processed)} envelopes com sucesso."
         )
+        logger.info(f"Tarefa #{process_number} concluída com êxito! {len(envelopes_processed)} envelope(s) processado(s).")
 
         return {
             "status": "SUCESSO",
@@ -340,6 +351,7 @@ class OrchestratorController:
             "clusters_count": len(clusters),
             "envelopes": envelopes_processed
         }
+
 
     def _handle_update_signature_method(self, task_payload: Dict[str, Any]) -> Dict[str, Any]:
         """Executa a alteração de canal/método de assinatura via PUT (Nodo 13)."""
@@ -380,6 +392,8 @@ class OrchestratorController:
         initial_id = task_payload.get("id_inicial")
         motivo = task_payload.get("motivo_cancelamento", "Cancelamento solicitado via esteira Fluid")
 
+        logger.info(f"Executando cancelamento administrativo de envelope (Nodo 16) para tarefa #{process_number} | Motivo: {motivo}")
+
         journey = self.api_client.get_or_create_journey(
             mongo_id=mongo_id,
             process_name=process_name,
@@ -394,10 +408,14 @@ class OrchestratorController:
             reason=motivo
         )
 
+        logger.info(f"Cancelamento concluído com êxito para tarefa #{process_number}.")
+
         return {
             "status": "SUCESSO",
             "nodo": AutomationNode.CANCEL_ENVELOPE.value,
             "journey_id": str(journey["id"]),
             "process_number": process_number,
+            "envelope_status": "CANCELED",
             **result
         }
+

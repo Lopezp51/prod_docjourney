@@ -6,13 +6,13 @@ Possui fallback transparente para Mock em memória quando o servidor estiver off
 """
 
 import os
-import logging
 from typing import Dict, Any, List, Optional
 from uuid import UUID, uuid4
 from datetime import datetime
 
 import httpx
 
+from automacao.logging_config import logger
 from automacao.domain.enums import (
     JourneyStatus,
     EnvelopeStatus,
@@ -20,7 +20,6 @@ from automacao.domain.enums import (
     MaintenanceReason
 )
 
-logger = logging.getLogger("MicroserviceApiClient")
 
 
 class MicroserviceApiClient:

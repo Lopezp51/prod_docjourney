@@ -37,7 +37,12 @@ env/
 .vscode/
 .idea/
 
+# Logs
+logs/
+*.log
+
 # OS generated files
 Thumbs.db
 Desktop.ini
 .DS_Store
+

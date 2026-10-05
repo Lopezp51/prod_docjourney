@@ -240,6 +240,13 @@ class EnvelopeCluster:
         return self.scope_hash
 
     @property
+    def documents(self) -> List[AttachmentData]:
+        """Alias para attachments."""
+        return self.attachments
+
+
+
+    @property
     def documentos_ids(self) -> List[str]:
         """Alias retrocompatível."""
         return self.document_ids

@@ -5,7 +5,6 @@ Nomes de classes, métodos e variáveis 100% em inglês com docstrings explicati
 """
 
 import json
-import logging
 from typing import Dict, Any, List
 
 import os
@@ -15,10 +14,10 @@ from datetime import datetime
 
 import httpx
 
+from automacao.logging_config import logger
 from automacao.domain.exceptions import OpenApiIntegrationError, DocumentUploadError
 from automacao.domain.models import DocumentTypeMapping
 
-logger = logging.getLogger("OpenApiClient")
 
 
 class OpenApiV2Client:

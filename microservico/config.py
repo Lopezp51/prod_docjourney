@@ -23,7 +23,9 @@ class Config:
     
     NOTIFIER_WEBHOOK_URL: str = os.getenv("NOTIFIER_WEBHOOK_URL", "https://api-mock.sicredi.local/webhook/status")
     
-    # Se True, o FastAPI sobe o consumidor do RabbitMQ em uma thread paralela automaticamente
     ENABLE_EMBEDDED_WORKER: bool = os.getenv("ENABLE_EMBEDDED_WORKER", "true").lower() in ("true", "1", "yes")
+    
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+    LOG_DIR: str = os.getenv("LOG_DIR", "logs")
 
 config = Config()
